@@ -435,6 +435,22 @@ async def _handle_no_status(
 
     if is_shell_prompt(pane_current_command):
         _startup_times.pop(window_id, None)
+        # Hookless providers (Codex/Gemini) often sit at shell-like prompts while
+        # still being an active topic. Keep idle controls visible instead of
+        # clearing the status message.
+        provider_name = ""
+        with contextlib.suppress(Exception):
+            state = session_manager.get_window_state(window_id)
+            raw_provider = getattr(state, "provider_name", "")
+            if isinstance(raw_provider, str):
+                provider_name = raw_provider.lower()
+        if provider_name in ("codex", "gemini"):
+            _has_seen_status.add(window_id)
+            await _transition_to_idle(
+                bot, user_id, window_id, thread_id, chat_id, display, notif_mode
+            )
+            return
+
         await update_topic_emoji(bot, chat_id, thread_id, "done", display)
         _start_autoclose_timer(user_id, thread_id, "done", now)
         _last_typing_sent.pop((user_id, thread_id), None)

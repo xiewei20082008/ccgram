@@ -599,6 +599,35 @@ class TestShellPromptClearsStatus:
             await _handle_no_status(bot, 1, "@0", 42, "fish", "normal")
         assert (1, 42) not in _idle_clear_timers
 
+    async def test_hookless_shell_prompt_keeps_idle_status(self) -> None:
+        from ccbot.handlers.callback_data import IDLE_STATUS_TEXT
+        from ccbot.handlers.status_polling import _handle_no_status
+
+        _has_seen_status.add("@0")
+        bot = AsyncMock()
+        with (
+            patch("ccbot.handlers.status_polling.session_manager") as mock_sm,
+            patch("ccbot.handlers.status_polling.update_topic_emoji"),
+            patch(
+                "ccbot.handlers.status_polling.enqueue_status_update"
+            ) as mock_enqueue,
+            patch(
+                "ccbot.handlers.status_polling._check_transcript_activity",
+                return_value=False,
+            ),
+            patch("ccbot.handlers.status_polling.time") as mock_time,
+        ):
+            mock_time.monotonic.return_value = 1000.0
+            mock_sm.resolve_chat_id.return_value = -100
+            mock_sm.get_display_name.return_value = "project"
+            mock_sm.get_window_state.return_value = MagicMock(provider_name="codex")
+            await _handle_no_status(bot, 1, "@0", 42, "bash", "normal")
+
+        mock_enqueue.assert_called_once_with(
+            bot, 1, "@0", IDLE_STATUS_TEXT, thread_id=42
+        )
+        assert (1, 42) not in _autoclose_timers
+
 
 class TestActiveStatusCancelsIdleTimer:
     async def test_status_line_cancels_idle_timer(self) -> None:
