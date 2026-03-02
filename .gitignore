@@ -44,5 +44,9 @@ pkg/
 
 # Spec (keep .spec/ tracked)
 
+# ai artificats to skip
+.brainstorming/
+
+
 # ralphex progress logs
 progress*.txt
