@@ -17,8 +17,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Literal, cast
 
+from ccbot.command_catalog import (
+    command_catalog,
+    discover_user_defined_commands,
+    parse_frontmatter as _parse_frontmatter,
+)
 from ccbot.providers.base import AgentProvider
-from telegram import Bot, BotCommand
+from telegram import Bot, BotCommand, BotCommandScope
 
 logger = structlog.get_logger()
 
@@ -35,6 +40,7 @@ CC_BUILTINS: dict[str, str] = {
 # Bot-native commands (registered first, not from CC)
 _BOT_COMMANDS: list[tuple[str, str]] = [
     ("new", "Create new Claude session"),
+    ("commands", "List commands for this topic provider"),
     ("history", "Message history for this topic"),
     ("sessions", "Sessions dashboard"),
     ("resume", "Browse and resume past sessions"),
@@ -49,8 +55,6 @@ _BOT_COMMANDS: list[tuple[str, str]] = [
 # Telegram limits: max 100 commands, descriptions max 256 chars
 _MAX_TELEGRAM_COMMANDS = 100
 _MAX_DESCRIPTION_LEN = 256
-
-_FrontmatterReadError = (OSError, UnicodeDecodeError)
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,40 +85,8 @@ def _cc_desc(desc: str) -> str:
 
 
 def parse_frontmatter(path: Path) -> dict[str, str]:
-    """Parse YAML frontmatter from a markdown file.
-
-    Simple key:value parser — no PyYAML dependency. Handles the subset
-    needed for skills: name, description, user-invocable.
-    """
-    try:
-        text = path.read_text(encoding="utf-8")
-    except _FrontmatterReadError:
-        return {}
-
-    if not text.startswith("---"):
-        return {}
-
-    # Find closing ---
-    end = text.find("\n---", 3)
-    if end == -1:
-        return {}
-
-    result: dict[str, str] = {}
-    for line in text[4:end].splitlines():
-        line = line.strip()
-        if not line or ":" not in line:
-            continue
-        key, _, value = line.partition(":")
-        result[key.strip()] = value.strip().strip("\"'")
-    return result
-
-
-def _safe_iterdir(path: Path) -> list[Path]:
-    """Sorted directory listing, returning empty list on permission errors."""
-    try:
-        return sorted(path.iterdir())
-    except OSError:
-        return []
+    """Compatibility wrapper around provider-agnostic frontmatter parser."""
+    return _parse_frontmatter(path)
 
 
 def discover_cc_commands(claude_dir: Path | None = None) -> list[CCCommand]:
@@ -145,65 +117,87 @@ def discover_cc_commands(claude_dir: Path | None = None) -> list[CCCommand]:
             )
         )
 
-    # 2. Skills
-    skills_dir = claude_dir / "skills"
-    if skills_dir.is_dir():
-        for skill_dir in _safe_iterdir(skills_dir):
-            if not skill_dir.is_dir() or skill_dir.name.startswith("."):
-                continue
-            skill_file = skill_dir / "SKILL.md"
-            if not skill_file.is_file():
-                continue
-            fm = parse_frontmatter(skill_file)
-            if fm.get("user-invocable", "").lower() != "true":
-                continue
-            name = fm.get("name", skill_dir.name)
-            tg_name = _sanitize_telegram_name(name)
-            if not tg_name:
-                continue
-            desc = fm.get("description", f"↗ /{name}")
-            commands.append(
-                CCCommand(
-                    name=name,
-                    telegram_name=tg_name,
-                    description=_cc_desc(desc),
-                    source="skill",
-                )
+    # 2. User-defined skills + commands
+    for cmd in discover_user_defined_commands(claude_dir):
+        tg_name = _sanitize_telegram_name(cmd.name)
+        if not tg_name:
+            continue
+        commands.append(
+            CCCommand(
+                name=cmd.name,
+                telegram_name=tg_name,
+                description=_cc_desc(cmd.description),
+                source=cast(Literal["builtin", "skill", "command"], cmd.source),
             )
-
-    # 3. Custom commands
-    commands_dir = claude_dir / "commands"
-    if commands_dir.is_dir():
-        for group_dir in _safe_iterdir(commands_dir):
-            if not group_dir.is_dir() or group_dir.name.startswith("."):
-                continue
-            try:
-                md_files = sorted(group_dir.glob("*.md"))
-            except OSError:
-                continue
-            for cmd_file in md_files:
-                if cmd_file.name.startswith("."):
-                    continue
-                name = f"{group_dir.name}:{cmd_file.stem}"
-                tg_name = _sanitize_telegram_name(name)
-                if not tg_name:
-                    continue
-                fm = parse_frontmatter(cmd_file)
-                desc = fm.get("description", f"↗ /{name}")
-                commands.append(
-                    CCCommand(
-                        name=name,
-                        telegram_name=tg_name,
-                        description=_cc_desc(desc),
-                        source="command",
-                    )
-                )
+        )
 
     return commands
 
 
 # Module-level cache (telegram_name → cc_name, first-wins to match registration)
 _name_map: dict[str, str] = {}
+
+
+def _provider_base_dir(claude_dir: Path | None = None) -> str:
+    """Resolve base dir for provider command discovery."""
+    from ccbot.config import config as _cfg
+
+    return str(claude_dir) if claude_dir else str(_cfg.claude_config_dir)
+
+
+def discover_provider_commands(
+    provider: AgentProvider,
+    claude_dir: Path | None = None,
+) -> list[CCCommand]:
+    """Discover commands for one provider as CCCommand entries."""
+    base_dir = _provider_base_dir(claude_dir)
+    valid_sources = {"builtin", "skill", "command"}
+    discovered = command_catalog.get_provider_commands(provider, base_dir)
+    commands: list[CCCommand] = []
+    for cmd in discovered:
+        if not cmd.name:
+            continue
+        commands.append(
+            CCCommand(
+                name=cmd.name,
+                telegram_name=_sanitize_telegram_name(cmd.name),
+                description=_cc_desc(cmd.description),
+                source=cast(
+                    Literal["builtin", "skill", "command"],
+                    cmd.source if cmd.source in valid_sources else "command",
+                ),
+            )
+        )
+    return commands
+
+
+def get_provider_command_map(
+    provider: AgentProvider,
+    claude_dir: Path | None = None,
+) -> dict[str, str]:
+    """Build telegram_name -> original command mapping for a provider."""
+    mapping: dict[str, str] = {}
+    for cmd in discover_provider_commands(provider, claude_dir):
+        if cmd.telegram_name and cmd.telegram_name not in mapping:
+            mapping[cmd.telegram_name] = cmd.name
+    return mapping
+
+
+def get_provider_supported_commands(
+    provider: AgentProvider,
+    claude_dir: Path | None = None,
+) -> set[str]:
+    """Return normalized slash commands supported by a provider."""
+    supported: set[str] = set()
+    for name in get_provider_command_map(provider, claude_dir).values():
+        token = name if name.startswith("/") else f"/{name}"
+        supported.add(token.lower())
+    for name in provider.capabilities.builtin_commands:
+        if not name:
+            continue
+        token = name if name.startswith("/") else f"/{name}"
+        supported.add(token.lower())
+    return supported
 
 
 def _refresh_cache(
@@ -220,32 +214,12 @@ def _refresh_cache(
     """
     global _name_map
 
-    def _commands_from_provider(p: AgentProvider) -> list[CCCommand]:
-        from ccbot.config import config as _cfg
-
-        base_dir = str(claude_dir) if claude_dir else str(_cfg.claude_config_dir)
-        valid_sources = {"builtin", "skill", "command"}
-        discovered = p.discover_commands(base_dir)
-        return [
-            CCCommand(
-                name=cmd.name,
-                telegram_name=_sanitize_telegram_name(cmd.name),
-                description=_cc_desc(cmd.description),
-                source=cast(
-                    Literal["builtin", "skill", "command"],
-                    cmd.source if cmd.source in valid_sources else "command",
-                ),
-            )
-            for cmd in discovered
-            if cmd.name
-        ]
-
     if providers is not None:
         commands = []
         for discovered_provider in providers:
-            commands.extend(_commands_from_provider(discovered_provider))
+            commands.extend(discover_provider_commands(discovered_provider, claude_dir))
     elif provider is not None:
-        commands = _commands_from_provider(provider)
+        commands = discover_provider_commands(provider, claude_dir)
     else:
         commands = discover_cc_commands(claude_dir)
     # First-wins: matches the dedup order in register_commands
@@ -267,6 +241,8 @@ async def register_commands(
     claude_dir: Path | None = None,
     provider: AgentProvider | None = None,
     providers: Iterable[AgentProvider] | None = None,
+    include_cc_commands: bool = True,
+    scope: BotCommandScope | None = None,
 ) -> None:
     """Discover CC commands and register them in the Telegram bot menu.
 
@@ -276,7 +252,11 @@ async def register_commands(
     the remaining Telegram limit of discovered CC commands. Deduplicates
     by telegram_name (first-wins) and excludes collisions with bot-native names.
     """
-    commands = _refresh_cache(claude_dir, provider=provider, providers=providers)
+    commands = (
+        _refresh_cache(claude_dir, provider=provider, providers=providers)
+        if include_cc_commands
+        else []
+    )
 
     bot_commands = [BotCommand(name, desc) for name, desc in _BOT_COMMANDS]
     max_cc = _MAX_TELEGRAM_COMMANDS - len(bot_commands)
@@ -295,6 +275,10 @@ async def register_commands(
         bot_commands.append(BotCommand(cmd.telegram_name, desc))
         cc_count += 1
 
-    await bot.delete_my_commands()
-    await bot.set_my_commands(bot_commands)
+    if scope is None:
+        await bot.delete_my_commands()
+        await bot.set_my_commands(bot_commands)
+    else:
+        await bot.delete_my_commands(scope=scope)
+        await bot.set_my_commands(bot_commands, scope=scope)
     logger.info("Registered %d bot commands (%d CC)", len(bot_commands), cc_count)

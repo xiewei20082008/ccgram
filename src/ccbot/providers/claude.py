@@ -6,10 +6,9 @@ that translates between the provider protocol and existing module APIs.
 """
 
 import os
-from pathlib import Path
 from typing import Any, cast
 
-from ccbot.cc_commands import CC_BUILTINS, discover_cc_commands
+from ccbot.cc_commands import CC_BUILTINS
 from ccbot.hook import UUID_RE
 from ccbot.providers.base import (
     AgentMessage,
@@ -46,6 +45,7 @@ class ClaudeProvider:
         transcript_format="jsonl",
         terminal_ui_patterns=tuple(p.name for p in UI_PATTERNS),
         builtin_commands=tuple(CC_BUILTINS.keys()),
+        supports_user_command_discovery=True,
     )
 
     @property
@@ -189,11 +189,12 @@ class ClaudeProvider:
         return None  # Claude uses hooks, not transcript discovery
 
     def discover_commands(self, base_dir: str) -> list[DiscoveredCommand]:
-        claude_dir = Path(base_dir) if base_dir else None
-        commands = discover_cc_commands(claude_dir)
+        _ = base_dir
         return [
             DiscoveredCommand(
-                name=cmd.name, description=cmd.description, source=cmd.source
+                name=name,
+                description=desc,
+                source="builtin",
             )
-            for cmd in commands
+            for name, desc in CC_BUILTINS.items()
         ]

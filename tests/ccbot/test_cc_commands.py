@@ -9,8 +9,11 @@ import ccbot.cc_commands as cc_mod
 from ccbot.cc_commands import (
     CC_BUILTINS,
     _sanitize_telegram_name,
+    discover_provider_commands,
     discover_cc_commands,
     get_cc_name,
+    get_provider_command_map,
+    get_provider_supported_commands,
     parse_frontmatter,
     register_commands,
 )
@@ -332,6 +335,32 @@ class TestRegisterCommands:
         assert tg_names.count("foo_bar") == 1
 
     @pytest.mark.asyncio
+    async def test_can_register_bot_commands_only(self, tmp_path: Path) -> None:
+        bot = AsyncMock()
+        await register_commands(bot, claude_dir=tmp_path, include_cc_commands=False)
+
+        registered = bot.set_my_commands.call_args[0][0]
+        names = [c.command for c in registered]
+        assert "new" in names
+        assert "commands" in names
+        assert "clear" not in names
+
+    @pytest.mark.asyncio
+    async def test_register_commands_supports_scope(self, tmp_path: Path) -> None:
+        bot = AsyncMock()
+        scope = object()
+        await register_commands(
+            bot,
+            claude_dir=tmp_path,
+            include_cc_commands=False,
+            scope=scope,
+        )
+
+        bot.delete_my_commands.assert_called_once_with(scope=scope)
+        bot.set_my_commands.assert_called_once()
+        assert bot.set_my_commands.call_args.kwargs.get("scope") is scope
+
+    @pytest.mark.asyncio
     async def test_bot_native_name_collision_skipped(self, tmp_path: Path) -> None:
         # A skill that sanitizes to "new" should not create a duplicate
         skill_dir = tmp_path / "skills" / "new"
@@ -346,3 +375,45 @@ class TestRegisterCommands:
         registered = bot.set_my_commands.call_args[0][0]
         tg_names = [c.command for c in registered]
         assert tg_names.count("new") == 1
+
+
+class TestProviderCommandHelpers:
+    def test_discovers_codex_builtin_commands(self, tmp_path: Path) -> None:
+        from ccbot.providers.codex import CodexProvider
+
+        commands = discover_provider_commands(CodexProvider(), claude_dir=tmp_path)
+        names = {c.name for c in commands}
+        assert "/status" in names
+        assert "/mcp" in names
+
+    def test_builds_provider_command_map(self, tmp_path: Path) -> None:
+        from ccbot.providers.codex import CodexProvider
+
+        mapping = get_provider_command_map(CodexProvider(), claude_dir=tmp_path)
+        assert mapping["status"] == "/status"
+        assert mapping["permissions"] == "/permissions"
+
+    def test_provider_supported_commands_include_slash_form(
+        self, tmp_path: Path
+    ) -> None:
+        from ccbot.providers.claude import ClaudeProvider
+
+        supported = get_provider_supported_commands(
+            ClaudeProvider(), claude_dir=tmp_path
+        )
+        assert "/clear" in supported
+        assert "/compact" in supported
+
+    def test_codex_provider_discovery_includes_user_commands(
+        self, tmp_path: Path
+    ) -> None:
+        from ccbot.providers.codex import CodexProvider
+
+        cmd_dir = tmp_path / "commands" / "spec"
+        cmd_dir.mkdir(parents=True)
+        (cmd_dir / "work.md").write_text("---\ndescription: work\n---\n")
+
+        discovered = discover_provider_commands(CodexProvider(), claude_dir=tmp_path)
+        names = {cmd.name for cmd in discovered}
+        assert "/status" in names
+        assert "spec:work" in names

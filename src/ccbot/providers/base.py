@@ -117,6 +117,9 @@ class ProviderCapabilities:
     terminal_ui_patterns: tuple[str, ...] = ()
     uses_pane_title: bool = False  # Provider reads OSC pane title for status
     builtin_commands: tuple[str, ...] = ()
+    # When true, CommandCatalog appends user-defined commands discovered from
+    # the configured command sources (currently ~/.claude skills/commands).
+    supports_user_command_discovery: bool = False
 
 
 # ── Provider protocol ────────────────────────────────────────────────────
@@ -233,5 +236,11 @@ class AgentProvider(Protocol):
         ...
 
     def discover_commands(self, base_dir: str) -> list[DiscoveredCommand]:
-        """Discover available commands/skills from the provider's config."""
+        """Discover provider-native commands.
+
+        This method is expected to return provider-native commands (typically
+        built-ins). Higher-level command composition (for example, appending
+        user-defined commands from shared command sources) is done by
+        ``CommandCatalog.get_provider_commands()``.
+        """
         ...
