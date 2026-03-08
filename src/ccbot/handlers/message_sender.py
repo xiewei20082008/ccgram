@@ -15,9 +15,10 @@ import asyncio
 import re
 import structlog
 import time
+from collections.abc import Awaitable, Callable
 from typing import Any
 
-from telegram import Bot, LinkPreviewOptions, Message
+from telegram import Bot, CallbackQuery, LinkPreviewOptions, Message
 from telegram.error import BadRequest, RetryAfter, TelegramError
 
 from ..markdown_v2 import convert_markdown
@@ -33,6 +34,10 @@ _MDV2_STRIP_RE = re.compile(r"\\([_*\[\]()~`>#+\-=|{}.!\\])")
 # Strip expandable blockquote syntax: leading ">" prefix and trailing "||"
 _BLOCKQUOTE_PREFIX_RE = re.compile(r"^>", re.MULTILINE)
 _BLOCKQUOTE_CLOSE_RE = re.compile(r"\|\|$", re.MULTILINE)
+
+
+class _MessageGoneError(Exception):
+    """Raised when the target message no longer exists (deleted topic)."""
 
 
 def _retry_after_seconds(exc: RetryAfter) -> int:
@@ -67,6 +72,55 @@ async def rate_limit_send(chat_id: int) -> None:
     _last_send_time[chat_id] = time.monotonic()
 
 
+async def _with_mdv2_fallback(
+    send_fn: Callable[..., Awaitable[Any]],
+    text: str,
+    context_label: str,
+    **kwargs: Any,
+) -> Message | None:
+    """Try MarkdownV2, fall back to plain text, handle RetryAfter throughout.
+
+    Generic helper that eliminates the repeated MarkdownV2 → plain text →
+    RetryAfter pattern across all send/reply/edit functions.
+
+    Args:
+        send_fn: Async callable accepting (text, parse_mode=..., **kwargs).
+        text: Raw markdown text (pre-conversion).
+        context_label: Label for warning log messages (e.g. "send to 123").
+        **kwargs: Extra keyword arguments forwarded to send_fn.
+
+    Returns the result Message on success, None on failure.
+    """
+    # Phase 1: try MarkdownV2
+    try:
+        return await send_fn(convert_markdown(text), parse_mode="MarkdownV2", **kwargs)
+    except RetryAfter as e:
+        await asyncio.sleep(_retry_after_seconds(e) + 1)
+        try:
+            return await send_fn(
+                convert_markdown(text), parse_mode="MarkdownV2", **kwargs
+            )
+        except TelegramError as e2:
+            logger.warning("Failed to %s after retry: %s", context_label, e2)
+            return None
+    except TelegramError:
+        pass
+
+    # Phase 2: fall back to plain text (stripped MarkdownV2 artifacts)
+    try:
+        return await send_fn(strip_mdv2(text), **kwargs)
+    except RetryAfter as e:
+        await asyncio.sleep(_retry_after_seconds(e) + 1)
+        try:
+            return await send_fn(strip_mdv2(text), **kwargs)
+        except TelegramError as e2:
+            logger.warning("Failed to %s after retry: %s", context_label, e2)
+            return None
+    except TelegramError as e:
+        logger.warning("Failed to %s: %s", context_label, e)
+        return None
+
+
 async def _send_with_fallback(
     bot: Bot,
     chat_id: int,
@@ -80,44 +134,13 @@ async def _send_with_fallback(
     Returns the sent Message on success, None on failure.
     """
     kwargs.setdefault("link_preview_options", NO_LINK_PREVIEW)
-    try:
-        return await bot.send_message(
-            chat_id=chat_id,
-            text=convert_markdown(text),
-            parse_mode="MarkdownV2",
-            **kwargs,
-        )
-    except RetryAfter as e:
-        await asyncio.sleep(_retry_after_seconds(e) + 1)
-        try:
-            return await bot.send_message(
-                chat_id=chat_id,
-                text=convert_markdown(text),
-                parse_mode="MarkdownV2",
-                **kwargs,
-            )
-        except TelegramError as e2:
-            logger.warning("Failed to send message to %s after retry: %s", chat_id, e2)
-            return None
-    except TelegramError:
-        try:
-            return await bot.send_message(
-                chat_id=chat_id, text=strip_mdv2(text), **kwargs
-            )
-        except RetryAfter as e:
-            await asyncio.sleep(_retry_after_seconds(e) + 1)
-            try:
-                return await bot.send_message(
-                    chat_id=chat_id, text=strip_mdv2(text), **kwargs
-                )
-            except TelegramError as e2:
-                logger.warning(
-                    "Failed to send message to %s after retry: %s", chat_id, e2
-                )
-                return None
-        except TelegramError as e:
-            logger.warning("Failed to send message to %s: %s", chat_id, e)
-            return None
+
+    async def _send(text: str, **kw: Any) -> Message:
+        return await bot.send_message(chat_id=chat_id, text=text, **kw)
+
+    return await _with_mdv2_fallback(
+        _send, text, f"send message to {chat_id}", **kwargs
+    )
 
 
 async def rate_limit_send_message(
@@ -144,44 +167,23 @@ async def safe_reply(message: Message, text: str, **kwargs: Any) -> Message | No
     Handles RetryAfter with a single sleep+retry instead of propagating.
     """
     kwargs.setdefault("link_preview_options", NO_LINK_PREVIEW)
+
+    async def _reply(text: str, **kw: Any) -> Message:
+        try:
+            return await message.reply_text(text, **kw)
+        except BadRequest as exc:
+            if "not found" in str(exc).lower():
+                logger.warning("Cannot reply: original message gone (%s)", exc)
+                raise _MessageGoneError from exc
+            raise
+
     try:
-        return await message.reply_text(
-            convert_markdown(text),
-            parse_mode="MarkdownV2",
-            **kwargs,
-        )
-    except BadRequest as exc:
-        if "not found" in str(exc).lower():
-            logger.warning("Cannot reply: original message gone (%s)", exc)
-            return None
-        raise
-    except RetryAfter as e:
-        await asyncio.sleep(_retry_after_seconds(e) + 1)
-        try:
-            return await message.reply_text(
-                convert_markdown(text),
-                parse_mode="MarkdownV2",
-                **kwargs,
-            )
-        except TelegramError as e2:
-            logger.warning("Failed to reply after retry: %s", e2)
-            return None
-    except TelegramError:
-        try:
-            return await message.reply_text(strip_mdv2(text), **kwargs)
-        except RetryAfter as e:
-            await asyncio.sleep(_retry_after_seconds(e) + 1)
-            try:
-                return await message.reply_text(strip_mdv2(text), **kwargs)
-            except TelegramError as e2:
-                logger.warning("Failed to reply after retry: %s", e2)
-                return None
-        except TelegramError as e2:
-            logger.warning("Failed to reply: %s", e2)
-            return None
+        return await _with_mdv2_fallback(_reply, text, "reply", **kwargs)
+    except _MessageGoneError:
+        return None
 
 
-async def safe_edit(target: Any, text: str, **kwargs: Any) -> None:
+async def safe_edit(target: Message | CallbackQuery, text: str, **kwargs: Any) -> None:
     """Edit message with MarkdownV2, falling back to plain text on failure.
 
     Accepts either a CallbackQuery (edit_message_text) or a Message (edit_text).
@@ -189,36 +191,14 @@ async def safe_edit(target: Any, text: str, **kwargs: Any) -> None:
     """
     kwargs.setdefault("link_preview_options", NO_LINK_PREVIEW)
     # Message.edit_text vs CallbackQuery.edit_message_text
-    edit_fn = (
+    raw_edit_fn = (
         target.edit_text if isinstance(target, Message) else target.edit_message_text
     )
-    try:
-        await edit_fn(
-            convert_markdown(text),
-            parse_mode="MarkdownV2",
-            **kwargs,
-        )
-    except RetryAfter as e:
-        await asyncio.sleep(_retry_after_seconds(e) + 1)
-        try:
-            await edit_fn(
-                convert_markdown(text),
-                parse_mode="MarkdownV2",
-                **kwargs,
-            )
-        except TelegramError as e2:
-            logger.warning("Failed to edit message after retry: %s", e2)
-    except TelegramError:
-        try:
-            await edit_fn(strip_mdv2(text), **kwargs)
-        except RetryAfter as e:
-            await asyncio.sleep(_retry_after_seconds(e) + 1)
-            try:
-                await edit_fn(strip_mdv2(text), **kwargs)
-            except TelegramError as e2:
-                logger.warning("Failed to edit message after retry: %s", e2)
-        except TelegramError as e:
-            logger.warning("Failed to edit message: %s", e)
+
+    async def _edit(text: str, **kw: Any) -> Any:
+        return await raw_edit_fn(text, **kw)
+
+    await _with_mdv2_fallback(_edit, text, "edit message", **kwargs)
 
 
 async def safe_send(
@@ -235,34 +215,8 @@ async def safe_send(
     kwargs.setdefault("link_preview_options", NO_LINK_PREVIEW)
     if message_thread_id is not None:
         kwargs.setdefault("message_thread_id", message_thread_id)
-    try:
-        await bot.send_message(
-            chat_id=chat_id,
-            text=convert_markdown(text),
-            parse_mode="MarkdownV2",
-            **kwargs,
-        )
-    except RetryAfter as e:
-        await asyncio.sleep(_retry_after_seconds(e) + 1)
-        try:
-            await bot.send_message(
-                chat_id=chat_id,
-                text=convert_markdown(text),
-                parse_mode="MarkdownV2",
-                **kwargs,
-            )
-        except TelegramError as e2:
-            logger.warning("Failed to send message to %s after retry: %s", chat_id, e2)
-    except TelegramError:
-        try:
-            await bot.send_message(chat_id=chat_id, text=strip_mdv2(text), **kwargs)
-        except RetryAfter as e:
-            await asyncio.sleep(_retry_after_seconds(e) + 1)
-            try:
-                await bot.send_message(chat_id=chat_id, text=strip_mdv2(text), **kwargs)
-            except TelegramError as e2:
-                logger.warning(
-                    "Failed to send message to %s after retry: %s", chat_id, e2
-                )
-        except TelegramError as e:
-            logger.warning("Failed to send message to %s: %s", chat_id, e)
+
+    async def _send(text: str, **kw: Any) -> Message:
+        return await bot.send_message(chat_id=chat_id, text=text, **kw)
+
+    await _with_mdv2_fallback(_send, text, f"send message to {chat_id}", **kwargs)
