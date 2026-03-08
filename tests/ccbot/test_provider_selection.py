@@ -3,7 +3,6 @@
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from telegram import InlineKeyboardMarkup
 
 from ccbot.handlers.callback_data import (
@@ -106,7 +105,6 @@ def _make_update(thread_id: int = 42) -> MagicMock:
     update = MagicMock()
     update.effective_user = MagicMock()
     update.effective_user.id = 100
-    # get_thread_id checks update.message first, then callback_query.message
     update.message = None
     update.callback_query = MagicMock()
     update.callback_query.message = MagicMock()
@@ -115,7 +113,6 @@ def _make_update(thread_id: int = 42) -> MagicMock:
 
 
 class TestHandleConfirmShowsProviderPicker:
-    @pytest.mark.asyncio
     @patch("ccbot.handlers.directory_callbacks.safe_edit", new_callable=AsyncMock)
     @patch("ccbot.handlers.directory_callbacks.session_manager")
     async def test_confirm_shows_provider_picker(
@@ -132,7 +129,6 @@ class TestHandleConfirmShowsProviderPicker:
 
         await _handle_confirm(query, 100, update, context)
 
-        # Should call safe_edit with provider picker content
         mock_edit.assert_called_once()
         call_args = mock_edit.call_args
         text = call_args[0][1]
@@ -140,7 +136,6 @@ class TestHandleConfirmShowsProviderPicker:
         keyboard = call_args.kwargs.get("reply_markup") or call_args[0][2]
         assert isinstance(keyboard, InlineKeyboardMarkup)
 
-    @pytest.mark.asyncio
     @patch("ccbot.handlers.directory_callbacks.safe_edit", new_callable=AsyncMock)
     @patch("ccbot.handlers.directory_callbacks.session_manager")
     async def test_confirm_clears_browse_state(
@@ -160,13 +155,11 @@ class TestHandleConfirmShowsProviderPicker:
 
         await _handle_confirm(query, 100, update, context)
 
-        # Browse state kept for _handle_provider_select (cleared there instead)
         assert "browse_path" in user_data
         assert "state" in user_data
 
 
 class TestHandleProviderSelect:
-    @pytest.mark.asyncio
     @patch("ccbot.handlers.directory_callbacks.safe_edit", new_callable=AsyncMock)
     @patch("ccbot.handlers.directory_callbacks.tmux_manager")
     @patch("ccbot.handlers.directory_callbacks.provider_registry")
@@ -196,7 +189,6 @@ class TestHandleProviderSelect:
         text = mock_edit.call_args[0][1]
         assert "Select Session Mode" in text
 
-    @pytest.mark.asyncio
     @patch("ccbot.handlers.directory_callbacks.provider_registry")
     async def test_rejects_unknown_provider(self, mock_registry: MagicMock) -> None:
         mock_registry.is_valid.return_value = False
@@ -211,7 +203,6 @@ class TestHandleProviderSelect:
 
 
 class TestHandleModeSelect:
-    @pytest.mark.asyncio
     @patch("ccbot.providers.resolve_launch_command")
     @patch("ccbot.handlers.directory_callbacks.safe_edit", new_callable=AsyncMock)
     @patch("ccbot.handlers.directory_callbacks.session_manager")
@@ -258,7 +249,6 @@ class TestHandleModeSelect:
         mock_sm.set_window_provider.assert_called_once_with("@5", "codex")
         mock_sm.set_window_approval_mode.assert_called_once_with("@5", "yolo")
 
-    @pytest.mark.asyncio
     @patch("ccbot.handlers.directory_callbacks.provider_registry")
     async def test_rejects_unknown_mode(self, mock_registry: MagicMock) -> None:
         mock_registry.is_valid.return_value = True
@@ -271,7 +261,6 @@ class TestHandleModeSelect:
         )
         query.answer.assert_any_call("Unknown mode", show_alert=True)
 
-    @pytest.mark.asyncio
     @patch("ccbot.providers.resolve_launch_command")
     @patch("ccbot.handlers.directory_callbacks.safe_edit", new_callable=AsyncMock)
     @patch("ccbot.handlers.directory_callbacks.session_manager")

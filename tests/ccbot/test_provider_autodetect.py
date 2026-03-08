@@ -79,7 +79,6 @@ class TestDetectProviderFromRuntime:
 
 
 class TestHandleNewWindowAutoDetection:
-    @pytest.mark.asyncio
     @patch("ccbot.bot.tmux_manager")
     @patch("ccbot.bot.session_manager")
     @patch("ccbot.bot.config")
@@ -112,7 +111,6 @@ class TestHandleNewWindowAutoDetection:
         mock_detect.assert_called_once_with("codex")
         mock_sm.set_window_provider.assert_called_once_with("@5", "codex")
 
-    @pytest.mark.asyncio
     @patch("ccbot.bot.tmux_manager")
     @patch("ccbot.bot.session_manager")
     @patch("ccbot.bot.config")
@@ -144,7 +142,6 @@ class TestHandleNewWindowAutoDetection:
         mock_detect.assert_not_called()
         mock_sm.set_window_provider.assert_not_called()
 
-    @pytest.mark.asyncio
     @patch("ccbot.bot.tmux_manager")
     @patch("ccbot.bot.session_manager")
     @patch("ccbot.bot.config")
@@ -174,7 +171,6 @@ class TestHandleNewWindowAutoDetection:
         mock_detect.assert_not_called()
         mock_sm.set_window_provider.assert_not_called()
 
-    @pytest.mark.asyncio
     @patch("ccbot.bot.tmux_manager")
     @patch("ccbot.bot.session_manager")
     @patch("ccbot.bot.config")
@@ -209,7 +205,6 @@ class TestHandleNewWindowAutoDetection:
         mock_tmux.get_pane_title.assert_awaited_once_with("@8")
         mock_sm.set_window_provider.assert_called_once_with("@8", "gemini")
 
-    @pytest.mark.asyncio
     @patch("ccbot.bot.tmux_manager")
     @patch("ccbot.bot.session_manager")
     @patch("ccbot.bot.config")
@@ -244,7 +239,6 @@ class TestHandleNewWindowAutoDetection:
         mock_tmux.get_pane_title.assert_awaited_once_with("@10")
         mock_sm.set_window_provider.assert_not_called()
 
-    @pytest.mark.asyncio
     @patch("ccbot.bot.tmux_manager")
     @patch("ccbot.bot.session_manager")
     @patch("ccbot.bot.config")
@@ -279,7 +273,6 @@ class TestHandleNewWindowAutoDetection:
 
 
 class TestSessionMonitorProviderFromMap:
-    @pytest.mark.asyncio
     async def test_sets_provider_from_session_map(self, tmp_path) -> None:
         monitor = SessionMonitor(
             projects_path=tmp_path / "projects",
@@ -309,7 +302,6 @@ class TestSessionMonitorProviderFromMap:
             await monitor._detect_and_cleanup_changes()
             mock_sm.set_window_provider.assert_called_once_with("@5", "codex")
 
-    @pytest.mark.asyncio
     async def test_skips_provider_when_not_in_map(self, tmp_path) -> None:
         monitor = SessionMonitor(
             projects_path=tmp_path / "projects",

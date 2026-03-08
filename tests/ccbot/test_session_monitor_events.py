@@ -25,7 +25,6 @@ def events_file(tmp_path: Path, monkeypatch) -> Path:
     return path
 
 
-@pytest.mark.asyncio
 class TestReadHookEvents:
     async def test_reads_events_incrementally(
         self, monitor: SessionMonitor, events_file: Path

@@ -6,6 +6,7 @@ import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from telegram import Bot
 from telegram.error import BadRequest, TelegramError
 
 from conftest import make_mock_provider
@@ -96,7 +97,7 @@ class TestAutocloseTimers:
         self, state: str, minutes: int, elapsed: float
     ) -> None:
         _start_autoclose_timer(1, 42, state, 0.0)
-        bot = AsyncMock()
+        bot = AsyncMock(spec=Bot)
         with (
             patch("ccbot.handlers.status_polling.config") as mock_config,
             patch("ccbot.handlers.status_polling.session_manager") as mock_sm,
@@ -114,7 +115,7 @@ class TestAutocloseTimers:
 
     async def test_check_not_expired_yet(self) -> None:
         _start_autoclose_timer(1, 42, "done", 0.0)
-        bot = AsyncMock()
+        bot = AsyncMock(spec=Bot)
         with (
             patch("ccbot.handlers.status_polling.config") as mock_config,
             patch("ccbot.handlers.status_polling.time") as mock_time,
@@ -128,7 +129,7 @@ class TestAutocloseTimers:
 
     async def test_check_disabled_when_zero(self) -> None:
         _start_autoclose_timer(1, 42, "done", 0.0)
-        bot = AsyncMock()
+        bot = AsyncMock(spec=Bot)
         with (
             patch("ccbot.handlers.status_polling.config") as mock_config,
             patch("ccbot.handlers.status_polling.time") as mock_time,
@@ -141,7 +142,7 @@ class TestAutocloseTimers:
 
     async def test_check_telegram_error_handled(self) -> None:
         _start_autoclose_timer(1, 42, "done", 0.0)
-        bot = AsyncMock()
+        bot = AsyncMock(spec=Bot)
         bot.close_forum_topic.side_effect = TelegramError("fail")
         with (
             patch("ccbot.handlers.status_polling.config") as mock_config,
@@ -237,7 +238,7 @@ class TestStartupTimeout:
     async def test_first_poll_records_startup_time(self) -> None:
         from ccbot.handlers.status_polling import _handle_no_status
 
-        bot = AsyncMock()
+        bot = AsyncMock(spec=Bot)
         with (
             patch("ccbot.handlers.status_polling.session_manager") as mock_sm,
             patch("ccbot.handlers.status_polling.update_topic_emoji"),
@@ -260,7 +261,7 @@ class TestStartupTimeout:
     async def test_startup_timeout_transitions_to_idle(self) -> None:
         from ccbot.handlers.status_polling import _handle_no_status
 
-        bot = AsyncMock()
+        bot = AsyncMock(spec=Bot)
         _get_window_state("@0").startup_time = 1000.0
         with (
             patch("ccbot.handlers.status_polling.session_manager") as mock_sm,
@@ -286,7 +287,7 @@ class TestStartupTimeout:
     async def test_startup_grace_period_sends_typing(self) -> None:
         from ccbot.handlers.status_polling import _handle_no_status
 
-        bot = AsyncMock()
+        bot = AsyncMock(spec=Bot)
         _get_window_state("@0").startup_time = 1000.0
         with (
             patch("ccbot.handlers.status_polling.session_manager") as mock_sm,
@@ -432,7 +433,7 @@ class TestPyteFallbackInUpdateStatus:
             mock_sm.get_display_name.return_value = "project"
             mock_sm.get_notification_mode.return_value = "normal"
 
-            bot = AsyncMock()
+            bot = AsyncMock(spec=Bot)
             await update_status_message(bot, 1, "@0", thread_id=42)
 
             # Provider regex parsing was called as fallback
@@ -478,7 +479,7 @@ class TestPyteFallbackInUpdateStatus:
             mock_sm.get_display_name.return_value = "project"
             mock_sm.get_notification_mode.return_value = "normal"
 
-            bot = AsyncMock()
+            bot = AsyncMock(spec=Bot)
             await update_status_message(bot, 1, "@0", thread_id=42)
 
             # Provider regex parsing was NOT called (pyte succeeded)
@@ -510,7 +511,7 @@ class TestTransitionToIdle:
         from ccbot.handlers.callback_data import IDLE_STATUS_TEXT
         from ccbot.handlers.status_polling import _transition_to_idle
 
-        bot = AsyncMock()
+        bot = AsyncMock(spec=Bot)
         with (
             patch("ccbot.handlers.status_polling.update_topic_emoji"),
             patch(
@@ -528,7 +529,7 @@ class TestTransitionToIdle:
     async def test_suppressed_mode_clears_status_no_timer(self, mode: str) -> None:
         from ccbot.handlers.status_polling import _transition_to_idle
 
-        bot = AsyncMock()
+        bot = AsyncMock(spec=Bot)
         with (
             patch("ccbot.handlers.status_polling.update_topic_emoji"),
             patch(
@@ -544,7 +545,7 @@ class TestShellPromptClearsStatus:
         from ccbot.handlers.status_polling import _handle_no_status
 
         _get_window_state("@0").has_seen_status = True
-        bot = AsyncMock()
+        bot = AsyncMock(spec=Bot)
         with (
             patch("ccbot.handlers.status_polling.session_manager") as mock_sm,
             patch("ccbot.handlers.status_polling.update_topic_emoji"),
@@ -568,7 +569,7 @@ class TestShellPromptClearsStatus:
         from ccbot.handlers.status_polling import _handle_no_status
 
         _get_window_state("@0").has_seen_status = True
-        bot = AsyncMock()
+        bot = AsyncMock(spec=Bot)
         with (
             patch("ccbot.handlers.status_polling.session_manager") as mock_sm,
             patch("ccbot.handlers.status_polling.update_topic_emoji"),
@@ -596,7 +597,7 @@ class TestShellPromptClearsStatus:
 class TestProbeFailures:
     async def test_probe_skips_suspended_windows(self) -> None:
         _get_window_state("@5").probe_failures = _MAX_PROBE_FAILURES
-        bot = AsyncMock()
+        bot = AsyncMock(spec=Bot)
         with patch("ccbot.handlers.status_polling.session_manager") as mock_sm:
             mock_sm.iter_thread_bindings.return_value = [(1, 42, "@5")]
             await _probe_topic_existence(bot)
@@ -604,7 +605,7 @@ class TestProbeFailures:
 
     async def test_probe_success_resets_counter(self) -> None:
         _get_window_state("@5").probe_failures = 2
-        bot = AsyncMock()
+        bot = AsyncMock(spec=Bot)
         with patch("ccbot.handlers.status_polling.session_manager") as mock_sm:
             mock_sm.iter_thread_bindings.return_value = [(1, 42, "@5")]
             mock_sm.resolve_chat_id.return_value = -100
@@ -625,7 +626,7 @@ class TestProbeFailures:
         ],
     )
     async def test_probe_error_increments_counter(self, exc: TelegramError) -> None:
-        bot = AsyncMock()
+        bot = AsyncMock(spec=Bot)
         bot.unpin_all_forum_topic_messages.side_effect = exc
         with patch("ccbot.handlers.status_polling.session_manager") as mock_sm:
             mock_sm.iter_thread_bindings.return_value = [(1, 42, "@5")]
@@ -634,7 +635,7 @@ class TestProbeFailures:
         assert _window_poll_state["@5"].probe_failures == 1
 
     async def test_probe_suspends_after_max_failures(self) -> None:
-        bot = AsyncMock()
+        bot = AsyncMock(spec=Bot)
         bot.unpin_all_forum_topic_messages.side_effect = TelegramError("Timed out")
         with patch("ccbot.handlers.status_polling.session_manager") as mock_sm:
             mock_sm.iter_thread_bindings.return_value = [(1, 42, "@5")]
@@ -653,7 +654,7 @@ class TestProbeFailures:
     )
     async def test_topic_deleted_cleans_up(self, window_alive: bool) -> None:
         _get_window_state("@5").probe_failures = 1
-        bot = AsyncMock()
+        bot = AsyncMock(spec=Bot)
         bot.unpin_all_forum_topic_messages.side_effect = BadRequest("Topic_id_invalid")
         mock_window = MagicMock()
         mock_window.window_id = "@5"

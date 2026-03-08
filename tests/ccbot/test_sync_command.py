@@ -133,9 +133,9 @@ class TestSyncDismiss:
 
         with patch("ccbot.handlers.sync_command.safe_edit") as mock_edit:
             await handle_sync_dismiss(query)
-            mock_edit.assert_called_once()
-            assert mock_edit.call_args[0][1] == "some report text"
-            assert mock_edit.call_args.kwargs.get("reply_markup") is None
+            mock_edit.assert_called_once_with(
+                query, "some report text", reply_markup=None
+            )
 
     async def test_dismiss_fallback_when_no_text(self, _patch_deps) -> None:
         query = AsyncMock()
@@ -143,8 +143,7 @@ class TestSyncDismiss:
 
         with patch("ccbot.handlers.sync_command.safe_edit") as mock_edit:
             await handle_sync_dismiss(query)
-            mock_edit.assert_called_once()
-            assert mock_edit.call_args[0][1] == "Dismissed"
+            mock_edit.assert_called_once_with(query, "Dismissed", reply_markup=None)
 
 
 class TestSyncCommand:

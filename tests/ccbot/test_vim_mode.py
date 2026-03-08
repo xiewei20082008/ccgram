@@ -104,14 +104,12 @@ class TestEnsureVimInsertMode:
     def manager(self):
         return _make_manager()
 
-    @pytest.mark.asyncio
     async def test_cache_false_skips_entirely(self, manager):
         _vim_state["@1"] = False
         with patch.object(manager, "capture_pane", new_callable=AsyncMock) as cap:
             await manager._ensure_vim_insert_mode("@1")
             cap.assert_not_called()
 
-    @pytest.mark.asyncio
     async def test_insert_visible_sets_cache_true(self, manager):
         with patch.object(
             manager,
@@ -122,7 +120,6 @@ class TestEnsureVimInsertMode:
             await manager._ensure_vim_insert_mode("@1")
         assert _vim_state["@1"] is True
 
-    @pytest.mark.asyncio
     async def test_cache_true_normal_mode_enters_insert(self, manager):
         _vim_state["@1"] = True
         captures = iter(["prompt>", "prompt>\n-- INSERT --"])
@@ -142,7 +139,6 @@ class TestEnsureVimInsertMode:
         send.assert_called_once_with("@1", "i", enter=False, literal=True)
         mock_sleep.assert_awaited_once_with(_VIM_PROBE_DELAY)
 
-    @pytest.mark.asyncio
     async def test_cache_true_vim_turned_off_sends_backspace(self, manager):
         _vim_state["@1"] = True
         captures = iter(["prompt>", "prompt> i"])
@@ -165,7 +161,6 @@ class TestEnsureVimInsertMode:
         assert _vim_state["@1"] is False
         assert calls == [("i", True), ("BSpace", False)]
 
-    @pytest.mark.asyncio
     async def test_probe_unknown_vim_on(self, manager):
         assert "@1" not in _vim_state
         captures = iter(["prompt>", "prompt>\n-- INSERT --"])
@@ -181,7 +176,6 @@ class TestEnsureVimInsertMode:
             await manager._ensure_vim_insert_mode("@1")
         assert _vim_state["@1"] is True
 
-    @pytest.mark.asyncio
     async def test_probe_unknown_vim_off(self, manager):
         assert "@1" not in _vim_state
         captures = iter(["prompt>", "prompt> i"])
@@ -204,7 +198,6 @@ class TestEnsureVimInsertMode:
         assert _vim_state["@1"] is False
         assert calls == [("i", True), ("BSpace", False)]
 
-    @pytest.mark.asyncio
     async def test_first_capture_failure_returns_early(self, manager):
         with (
             patch.object(
@@ -215,7 +208,6 @@ class TestEnsureVimInsertMode:
             await manager._ensure_vim_insert_mode("@1")
         send.assert_not_called()
 
-    @pytest.mark.asyncio
     async def test_post_probe_capture_none_leaves_state_unchanged(self, manager):
         """Second capture returns None → don't change cache, don't backspace."""
         _vim_state["@1"] = True
@@ -241,7 +233,6 @@ class TestEnsureVimInsertMode:
         # Only the probe 'i' was sent, no backspace
         assert calls == [("i", True)]
 
-    @pytest.mark.asyncio
     async def test_pane_send_failure_returns_early(self, manager):
         captures = iter(["prompt>"])
 
@@ -264,7 +255,6 @@ class TestSelfCorrection:
     def manager(self):
         return _make_manager()
 
-    @pytest.mark.asyncio
     async def test_vim_enabled_mid_session(self, manager):
         _vim_state["@1"] = False
         with patch.object(manager, "capture_pane", new_callable=AsyncMock) as cap:
@@ -274,7 +264,6 @@ class TestSelfCorrection:
         notify_vim_insert_seen("@1")
         assert _vim_state["@1"] is True
 
-    @pytest.mark.asyncio
     async def test_vim_disabled_mid_session(self, manager):
         _vim_state["@1"] = True
         captures = iter(["prompt>", "prompt> i"])
@@ -299,7 +288,6 @@ class TestSendLiteralVimIntegration:
     def manager(self):
         return _make_manager()
 
-    @pytest.mark.asyncio
     async def test_vim_check_runs_before_text_send(self, manager):
         """_send_literal_then_enter calls _ensure_vim_insert_mode first."""
         _vim_state["@1"] = False  # fast path — skip vim check
@@ -314,7 +302,6 @@ class TestSendLiteralVimIntegration:
         assert result is True
         vim_check.assert_awaited_once_with("@1")
 
-    @pytest.mark.asyncio
     async def test_per_window_lock_serializes_sends(self, manager):
         """Concurrent sends to the same window are serialized by lock."""
         import asyncio

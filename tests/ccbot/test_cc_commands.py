@@ -227,31 +227,26 @@ class TestGetCCName:
         group_dir.mkdir(parents=True, exist_ok=True)
         (group_dir / f"{name}.md").write_text("---\ndescription: Test\n---\n")
 
-    @pytest.mark.asyncio
     async def test_builtin_lookup(self, tmp_path: Path) -> None:
         await register_commands(AsyncMock(), claude_dir=tmp_path)
         assert get_cc_name("clear") == "clear"
 
-    @pytest.mark.asyncio
     async def test_skill_lookup(self, tmp_path: Path) -> None:
         self._make_skill(tmp_path, "committing-code")
         await register_commands(AsyncMock(), claude_dir=tmp_path)
         assert get_cc_name("committing_code") == "committing-code"
 
-    @pytest.mark.asyncio
     async def test_command_lookup(self, tmp_path: Path) -> None:
         self._make_command(tmp_path, "spec", "work")
         await register_commands(AsyncMock(), claude_dir=tmp_path)
         assert get_cc_name("spec_work") == "spec:work"
 
-    @pytest.mark.asyncio
     async def test_not_found(self, tmp_path: Path) -> None:
         await register_commands(AsyncMock(), claude_dir=tmp_path)
         assert get_cc_name("nonexistent") is None
 
 
 class TestRegisterCommands:
-    @pytest.mark.asyncio
     async def test_registers_bot_and_cc_commands(self, tmp_path: Path) -> None:
         bot = AsyncMock()
         await register_commands(bot, claude_dir=tmp_path)
@@ -265,7 +260,6 @@ class TestRegisterCommands:
         assert "clear" in names
         assert "compact" in names
 
-    @pytest.mark.asyncio
     async def test_registers_commands_from_multiple_providers(
         self, tmp_path: Path
     ) -> None:
@@ -284,7 +278,6 @@ class TestRegisterCommands:
         assert "status" in names
         assert get_cc_name("status") == "/status"
 
-    @pytest.mark.asyncio
     async def test_description_truncation(self, tmp_path: Path) -> None:
         skill_dir = tmp_path / "skills" / "verbose"
         skill_dir.mkdir(parents=True)
@@ -300,7 +293,6 @@ class TestRegisterCommands:
         for cmd in registered:
             assert len(cmd.description) <= 256
 
-    @pytest.mark.asyncio
     async def test_telegram_command_limit(self, tmp_path: Path) -> None:
         commands_dir = tmp_path / "commands" / "bulk"
         commands_dir.mkdir(parents=True)
@@ -315,7 +307,6 @@ class TestRegisterCommands:
         registered = bot.set_my_commands.call_args[0][0]
         assert len(registered) <= 100
 
-    @pytest.mark.asyncio
     async def test_duplicate_telegram_names_deduplicated(self, tmp_path: Path) -> None:
         # skill "foo-bar" and command "foo:bar" both sanitize to "foo_bar"
         skill_dir = tmp_path / "skills" / "foo-bar"
@@ -334,7 +325,6 @@ class TestRegisterCommands:
         tg_names = [c.command for c in registered]
         assert tg_names.count("foo_bar") == 1
 
-    @pytest.mark.asyncio
     async def test_can_register_bot_commands_only(self, tmp_path: Path) -> None:
         bot = AsyncMock()
         await register_commands(bot, claude_dir=tmp_path, include_cc_commands=False)
@@ -345,7 +335,6 @@ class TestRegisterCommands:
         assert "commands" in names
         assert "clear" not in names
 
-    @pytest.mark.asyncio
     async def test_register_commands_supports_scope(self, tmp_path: Path) -> None:
         bot = AsyncMock()
         scope = object()
@@ -360,7 +349,6 @@ class TestRegisterCommands:
         bot.set_my_commands.assert_called_once()
         assert bot.set_my_commands.call_args.kwargs.get("scope") is scope
 
-    @pytest.mark.asyncio
     async def test_bot_native_name_collision_skipped(self, tmp_path: Path) -> None:
         # A skill that sanitizes to "new" should not create a duplicate
         skill_dir = tmp_path / "skills" / "new"

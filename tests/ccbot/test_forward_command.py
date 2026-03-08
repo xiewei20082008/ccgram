@@ -341,7 +341,6 @@ class TestForwardCommandResolution:
 
 
 class TestCommandFailureProbe:
-    @pytest.mark.asyncio
     async def test_probe_transcript_uses_incremental_reader_for_codex(
         self, tmp_path
     ) -> None:
@@ -374,7 +373,6 @@ class TestCommandFailureProbe:
         )
         assert result == "unknown command: /status"
 
-    @pytest.mark.asyncio
     async def test_probe_transcript_whole_file_not_implemented_returns_none(
         self, tmp_path
     ) -> None:
@@ -392,7 +390,6 @@ class TestCommandFailureProbe:
         result = await _probe_transcript_command_error(provider, str(transcript), 0)
         assert result is None
 
-    @pytest.mark.asyncio
     async def test_surfaces_transcript_error(self) -> None:
         provider = SimpleNamespace(capabilities=SimpleNamespace(name="codex"))
         message = AsyncMock()
@@ -421,7 +418,6 @@ class TestCommandFailureProbe:
         assert "failed" in mock_reply.call_args.args[1]
         assert "unrecognized command" in mock_reply.call_args.args[1]
 
-    @pytest.mark.asyncio
     async def test_falls_back_to_pane_delta_when_transcript_has_no_error(self) -> None:
         provider = SimpleNamespace(capabilities=SimpleNamespace(name="codex"))
         message = AsyncMock()
@@ -454,7 +450,6 @@ class TestCommandFailureProbe:
         mock_reply.assert_called_once()
         assert "unknown command" in mock_reply.call_args.args[1]
 
-    @pytest.mark.asyncio
     async def test_no_error_found_sends_no_message(self) -> None:
         provider = SimpleNamespace(capabilities=SimpleNamespace(name="codex"))
         message = AsyncMock()
