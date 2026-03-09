@@ -447,10 +447,10 @@ class TestExtractInteractiveContent:
         assert extract_interactive_content(pane) is None
 
 
-# ── is_interactive_ui (via extract_interactive_content) ───────────────────
+# ── extract_interactive_content boolean behavior ─────────────────────────
 
 
-class TestIsInteractiveUI:
+class TestExtractInteractiveContentBoolean:
     def test_true_when_ui_present(self, sample_pane_exit_plan: str):
         assert extract_interactive_content(sample_pane_exit_plan) is not None
 

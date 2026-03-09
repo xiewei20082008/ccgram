@@ -124,25 +124,11 @@ def detect_provider_from_command(pane_current_command: str) -> str:
     return ""
 
 
-def _provider_needs_pane_title(
-    provider: AgentProvider, pane_current_command: str
-) -> bool:
-    return provider.requires_pane_title_for_detection(pane_current_command)
-
-
-def _provider_matches_pane_title(
-    provider: AgentProvider,
-    pane_current_command: str,
-    pane_title: str,
-) -> bool:
-    return provider.detect_from_pane_title(pane_current_command, pane_title)
-
-
 def should_probe_pane_title_for_provider_detection(pane_current_command: str) -> bool:
     """Return True when any provider needs pane-title context to detect runtime."""
     _ensure_registered()
     for name in registry.provider_names():
-        if _provider_needs_pane_title(registry.get(name), pane_current_command):
+        if registry.get(name).requires_pane_title_for_detection(pane_current_command):
             return True
     return False
 
@@ -160,7 +146,7 @@ def detect_provider_from_runtime(
     _ensure_registered()
     for name in registry.provider_names():
         provider = registry.get(name)
-        if _provider_matches_pane_title(provider, pane_current_command, pane_title):
+        if provider.detect_from_pane_title(pane_current_command, pane_title):
             return provider.capabilities.name
     return ""
 

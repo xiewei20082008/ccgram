@@ -124,7 +124,7 @@ class TestHandleUnboundTopic:
         mock_picker.return_value = ("Pick:", MagicMock(), ["@5"])
 
         user_data: dict = {}
-        message = AsyncMock()
+        message = MagicMock()
 
         result = await _handle_unbound_topic(100, 42, "hello", user_data, message)
 

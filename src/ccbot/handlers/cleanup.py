@@ -36,13 +36,10 @@ async def clear_topic_state(
       - A topic is closed or deleted
       - A thread binding becomes stale (window deleted externally)
 
-    Cleans up:
-      - _status_msg_info (status message tracking)
-      - _tool_msg_ids (tool_use -> message_id mapping)
-      - _interactive_msgs and _interactive_mode (interactive UI state)
-      - _topic_states (topic emoji tracking)
-      - _has_seen_status (startup status tracking, if window_id provided)
-      - user_data pending state (PENDING_THREAD_ID, PENDING_THREAD_TEXT)
+    Removes full dict entries from _topic_poll_state / _window_poll_state
+    (not just field resets) to prevent orphaned state accumulation.
+    Also cleans up status messages, tool tracking, interactive UI, emoji,
+    command history, and user_data pending state.
     """
     # Clear status message from Telegram (if bot available) or just tracking
     if bot is not None:
@@ -55,34 +52,27 @@ async def clear_topic_state(
     # Clear tool message ID tracking
     clear_tool_msg_ids_for_topic(user_id, thread_id)
 
-    # Clear dead window notification and autoclose tracking (lazy import to avoid circular dep)
+    # Clear poll state (lazy import to avoid circular dep)
     from .status_polling import (
-        clear_autoclose_timer,
         clear_dead_notification,
-        clear_probe_failures,
-        clear_screen_buffer,
-        clear_seen_status,
-        clear_typing_state,
+        clear_pane_alerts,
+        clear_topic_poll_state,
+        clear_window_poll_state,
     )
 
     clear_dead_notification(user_id, thread_id)
-    clear_autoclose_timer(user_id, thread_id)
-    clear_typing_state(user_id, thread_id)
+    clear_topic_poll_state(user_id, thread_id)
     if window_id:
         from ..tmux_manager import clear_vim_state
 
         clear_vim_state(window_id)
-        clear_probe_failures(window_id)
-        clear_seen_status(window_id)
-        clear_screen_buffer(window_id)
+        clear_window_poll_state(window_id)
+        clear_pane_alerts(window_id)
         log_throttle_reset(f"topic-probe:{window_id}")
         log_throttle_reset(f"status-update:{user_id}:{thread_id}")
         from .hook_events import clear_subagents
 
         clear_subagents(window_id)
-        from .status_polling import clear_pane_alerts
-
-        clear_pane_alerts(window_id)
 
     # Clear interactive UI state (also deletes message from chat)
     await clear_interactive_msg(user_id, bot, thread_id)

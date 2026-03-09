@@ -1,5 +1,6 @@
 """Tests for interactive UI rendering."""
 
+import pytest
 from telegram import InlineKeyboardMarkup
 
 from ccbot.handlers.callback_data import (
@@ -22,10 +23,6 @@ def _cb_data(kb: InlineKeyboardMarkup, row: int | None = None) -> list[str]:
 
 
 class TestBuildInteractiveKeyboard:
-    def test_default_layout_has_three_rows(self) -> None:
-        kb = _build_interactive_keyboard("@0")
-        assert len(kb.inline_keyboard) == 3
-
     def test_default_layout_has_left_right(self) -> None:
         data = _cb_data(_build_interactive_keyboard("@0"), row=1)
         assert any(d.startswith(CB_ASK_LEFT) for d in data)
@@ -46,7 +43,9 @@ class TestBuildInteractiveKeyboard:
         assert data[0].startswith(CB_ASK_DOWN)
 
     def test_all_direction_keys_present(self) -> None:
-        data = _cb_data(_build_interactive_keyboard("@0"))
+        kb = _build_interactive_keyboard("@0")
+        assert len(kb.inline_keyboard) == 3
+        data = _cb_data(kb)
         for prefix in (
             CB_ASK_UP,
             CB_ASK_DOWN,
@@ -79,37 +78,37 @@ class TestBuildInteractiveKeyboard:
 
 
 class TestInteractiveModeTracking:
+    @pytest.fixture(autouse=True)
+    def _clear_interactive_mode(self) -> None:
+        from ccbot.handlers.interactive_ui import _interactive_mode
+
+        _interactive_mode.clear()
+
     def test_set_and_get(self) -> None:
         from ccbot.handlers.interactive_ui import (
-            _interactive_mode,
             get_interactive_window,
             set_interactive_mode,
         )
 
-        _interactive_mode.clear()
         set_interactive_mode(100, "@0", thread_id=42)
         assert get_interactive_window(100, 42) == "@0"
 
     def test_clear(self) -> None:
         from ccbot.handlers.interactive_ui import (
-            _interactive_mode,
             clear_interactive_mode,
             get_interactive_window,
             set_interactive_mode,
         )
 
-        _interactive_mode.clear()
         set_interactive_mode(100, "@0", thread_id=42)
         clear_interactive_mode(100, thread_id=42)
         assert get_interactive_window(100, 42) is None
 
     def test_none_thread_uses_zero(self) -> None:
         from ccbot.handlers.interactive_ui import (
-            _interactive_mode,
             get_interactive_window,
             set_interactive_mode,
         )
 
-        _interactive_mode.clear()
         set_interactive_mode(100, "@0", thread_id=None)
         assert get_interactive_window(100, None) == "@0"

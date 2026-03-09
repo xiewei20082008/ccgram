@@ -1,6 +1,6 @@
 """Tests for hook event dispatcher."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, patch
 
 from telegram import Bot
 
@@ -113,7 +113,7 @@ class TestHandleStop:
 
             mock_clear.assert_called_once_with("@0")
             mock_emoji.assert_called_once_with(bot, -100, 42, "done", "project")
-            mock_timer.assert_called_once()
+            mock_timer.assert_called_once_with(100, 42, "done", ANY)
             mock_enqueue.assert_called_once_with(bot, 100, "@0", None, thread_id=42)
 
     async def test_stop_no_users_skips(self, monkeypatch) -> None:

@@ -24,8 +24,6 @@ Key components:
   - Auto-close: closes topics stuck in done/dead state
 """
 
-from __future__ import annotations
-
 import asyncio
 import contextlib
 import structlog

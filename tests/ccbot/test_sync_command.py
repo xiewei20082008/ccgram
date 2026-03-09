@@ -126,7 +126,7 @@ class TestBuildReport:
 
 class TestSyncDismiss:
     async def test_dismiss_removes_keyboard(self, _patch_deps) -> None:
-        query = AsyncMock()
+        query = MagicMock()
         msg = MagicMock()
         msg.text = "some report text"
         query.message = msg
@@ -138,7 +138,7 @@ class TestSyncDismiss:
             )
 
     async def test_dismiss_fallback_when_no_text(self, _patch_deps) -> None:
-        query = AsyncMock()
+        query = MagicMock()
         query.message = None
 
         with patch("ccbot.handlers.sync_command.safe_edit") as mock_edit:
@@ -200,7 +200,7 @@ class TestSyncFix:
             AuditResult(issues=[], total_bindings=2, live_binding_count=2),
         ]
 
-        query = AsyncMock()
+        query = MagicMock()
 
         with patch("ccbot.handlers.sync_command.safe_edit") as mock_edit:
             await handle_sync_fix(query)
@@ -233,7 +233,7 @@ class TestSyncFix:
             ),
         ]
 
-        query = AsyncMock()
+        query = MagicMock()
 
         with patch("ccbot.handlers.sync_command.safe_edit") as mock_edit:
             await handle_sync_fix(query)
@@ -257,9 +257,9 @@ class TestSyncFix:
         ]
         mock_sm.resolve_chat_id.return_value = -999
 
-        query = AsyncMock()
+        query = MagicMock()
         mock_bot = AsyncMock()
-        query.get_bot = MagicMock(return_value=mock_bot)
+        query.get_bot.return_value = mock_bot
 
         with (
             patch("ccbot.handlers.sync_command.safe_edit") as mock_edit,
@@ -300,7 +300,7 @@ class TestSyncFix:
         ]
         mock_sm.resolve_chat_id.return_value = -999
 
-        query = AsyncMock()
+        query = MagicMock()
         mock_bot = AsyncMock()
         mock_bot.close_forum_topic.side_effect = TelegramError("Forbidden")
         query.get_bot = MagicMock(return_value=mock_bot)
@@ -333,9 +333,9 @@ class TestSyncFix:
         # Falls back to user_id — no group chat stored
         mock_sm.resolve_chat_id.return_value = 100
 
-        query = AsyncMock()
+        query = MagicMock()
         mock_bot = AsyncMock()
-        query.get_bot = MagicMock(return_value=mock_bot)
+        query.get_bot.return_value = mock_bot
 
         with (
             patch("ccbot.handlers.sync_command.safe_edit"),
@@ -363,7 +363,7 @@ class TestSyncFix:
             session_id="s1", cwd="/tmp", window_name="stray-proj"
         )
 
-        query = AsyncMock()
+        query = MagicMock()
 
         with (
             patch("ccbot.handlers.sync_command.safe_edit"),
