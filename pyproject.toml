@@ -24,7 +24,7 @@ dependencies = [
     "httpx>=0.27.0",
     "libtmux>=0.50.0",
     "Pillow>=10.0.0",
-    "telegramify-markdown>=0.5.0",
+    "telegramify-markdown>=1.0.0",
     "aiofiles>=24.0.0",
     "structlog>=24.0.0",
     "click>=8.1.0",
@@ -42,6 +42,7 @@ ccbot = "ccbot.main:main"
 
 [project.optional-dependencies]
 dev = [
+    "deptry>=0.23.0",
     "pyright>=1.1.0",
     "pytest>=8.0",
     "pytest-asyncio>=0.24.0",
@@ -111,6 +112,10 @@ max-statements = 60
 "src/ccbot/handlers/directory_callbacks.py" = ["C901"]
 # Recovery callbacks: fresh handler with state cleanup branches
 "src/ccbot/handlers/recovery_callbacks.py" = ["C901"]
+
+[tool.deptry.per_rule_ignores]
+# DEP002: dev/CLI tools (never imported in src/) + httpx (transitive runtime dep of python-telegram-bot)
+DEP002 = ["httpx", "deptry", "pyright", "pytest", "pytest-asyncio", "pytest-cov", "pytest-timeout", "ruff", "hypothesis"]
 
 [tool.pyright]
 pythonVersion = "3.14"

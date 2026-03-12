@@ -10,10 +10,7 @@ Key function: convert_markdown(text) → MarkdownV2 string.
 
 import re
 
-import mistletoe
-from mistletoe.block_token import BlockCode, remove_token
-from telegramify_markdown import _update_block, escape_latex
-from telegramify_markdown.render import TelegramMarkdownRenderer
+from telegramify_markdown import markdownify
 
 from .providers.base import EXPANDABLE_QUOTE_END, EXPANDABLE_QUOTE_START
 
@@ -70,23 +67,75 @@ def _render_expandable_quote(m: re.Match[str]) -> str:
     return "\n".join(built) + "||"
 
 
-def _markdownify(text: str) -> str:
-    """Custom markdownify with our rendering rules.
+_FENCE_RE = re.compile(r"^(`{3,}|~{3,})", re.MULTILINE)
+_INDENTED_CODE_RE = re.compile(r"(?<=\n\n)((?:    .+\n?)+)")
+_INDENTED_LINE_RE = re.compile(r"^    ", re.MULTILINE)
 
-    Wraps TelegramMarkdownRenderer directly (instead of calling
-    telegramify_markdown.markdownify) so we can tweak token rules
-    inside the context manager — reset_tokens() in __exit__ would
-    otherwise undo any module-level changes.
 
-    Custom rules:
-      - Disable indented code blocks (only fenced ``` blocks are code).
+def _strip_indented_code_blocks(text: str) -> str:
+    """Strip 4-space indentation that CommonMark treats as code blocks.
+
+    Claude Code uses fenced ``` blocks for code; indented blocks in its
+    output are typically continuation text, not code.  Pyromark (CommonMark)
+    converts 4-space-indented paragraphs into code blocks, so we strip
+    the leading spaces before conversion.
+
+    Fenced code blocks are left untouched — only non-fenced segments
+    are processed.
     """
-    with TelegramMarkdownRenderer(normalize_whitespace=False) as renderer:
-        remove_token(BlockCode)
-        content = escape_latex(text)
-        document = mistletoe.Document(content)
-        _update_block(document)
-        return renderer.render(document)
+    # Split text into alternating (outside-fence, inside-fence) segments
+    parts: list[str] = []
+    inside_fence = False
+    fence_marker = ""
+    last_end = 0
+
+    for m in _FENCE_RE.finditer(text):
+        marker = m.group(1)
+        if not inside_fence:
+            # Entering a fenced block — process the preceding non-fenced text
+            parts.append(_deindent(text[last_end : m.start()], last_end == 0))
+            inside_fence = True
+            fence_marker = marker  # e.g. "```" or "~~~~~"
+            last_end = m.start()
+        elif marker[0] == fence_marker[0] and len(marker) >= len(fence_marker):
+            # Closing fence — keep fenced content verbatim
+            end = m.end()
+            parts.append(text[last_end:end])
+            last_end = end
+            inside_fence = False
+            fence_marker = ""
+
+    # Remaining text after last fence (or entire text if no fences)
+    tail = text[last_end:]
+    if inside_fence:
+        # Unclosed fence — keep verbatim
+        parts.append(tail)
+    else:
+        parts.append(_deindent(tail, last_end == 0))
+
+    return "".join(parts)
+
+
+def _deindent(text: str, is_start: bool) -> str:
+    """Strip 4-space indented code blocks from a non-fenced text segment."""
+    if is_start:
+        text = re.sub(
+            r"^((?:    .+\n?)+)",
+            lambda m: _INDENTED_LINE_RE.sub("", m.group(0)),
+            text,
+        )
+    return _INDENTED_CODE_RE.sub(
+        lambda m: _INDENTED_LINE_RE.sub("", m.group(0)),
+        text,
+    )
+
+
+def _markdownify(text: str) -> str:
+    """Convert Markdown to Telegram MarkdownV2 via telegramify-markdown.
+
+    Pre-strips indented code blocks so only fenced ``` blocks are code.
+    """
+    return markdownify(_strip_indented_code_blocks(text))
 
 
 def convert_markdown(text: str) -> str:
