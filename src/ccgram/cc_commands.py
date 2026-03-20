@@ -286,10 +286,41 @@ async def register_commands(
         bot_commands.append(BotCommand(cmd.telegram_name, desc))
         cc_count += 1
 
-    if scope is None:
-        await bot.delete_my_commands()
-        await bot.set_my_commands(bot_commands)
-    else:
-        await bot.delete_my_commands(scope=scope)
-        await bot.set_my_commands(bot_commands, scope=scope)
+    import asyncio
+
+    from telegram.error import RetryAfter
+
+    max_attempts = 3
+    for attempt in range(1, max_attempts + 1):
+        try:
+            if scope is None:
+                await bot.delete_my_commands()
+                await bot.set_my_commands(bot_commands)
+            else:
+                await bot.delete_my_commands(scope=scope)
+                await bot.set_my_commands(bot_commands, scope=scope)
+            break
+        except RetryAfter as e:
+            retry_secs = min(
+                60,
+                (
+                    e.retry_after
+                    if isinstance(e.retry_after, int)
+                    else int(e.retry_after.total_seconds())
+                ),
+            )
+            if attempt < max_attempts:
+                logger.warning(
+                    "Telegram flood control registering commands, retry in %ds (attempt %d/%d)",
+                    retry_secs,
+                    attempt,
+                    max_attempts,
+                )
+                await asyncio.sleep(retry_secs)
+            else:
+                logger.warning(
+                    "Telegram flood control registering commands, giving up after %d attempts",
+                    max_attempts,
+                )
+                return
     logger.info("Registered %d bot commands (%d CC)", len(bot_commands), cc_count)

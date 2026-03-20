@@ -1649,7 +1649,10 @@ async def post_init(application: Application) -> None:
     global session_monitor, _status_poll_task, _global_provider_menu
 
     default_provider = get_provider()
-    await register_commands(application.bot, provider=default_provider)
+    try:
+        await register_commands(application.bot, provider=default_provider)
+    except TelegramError:
+        logger.warning("Failed to register bot commands at startup, will retry later")
     _global_provider_menu = default_provider.capabilities.name
 
     # Refresh bot command menu every 10 minutes.
