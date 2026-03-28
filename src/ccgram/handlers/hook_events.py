@@ -102,11 +102,13 @@ async def _handle_notification(event: HookEvent, bot: Bot) -> None:
 
 
 async def _handle_stop(event: HookEvent, bot: Bot) -> None:
-    """Handle a Stop event — instant done detection."""
-    from .status_polling import (
-        _start_autoclose_timer,
-        clear_seen_status,
-    )
+    """Handle a Stop event — transition directly to idle.
+
+    Edits the status message in-place to "Ready" (dedup catches identical
+    text) and sets the topic emoji to idle without an intermediate active
+    flicker.  Muted/errors_only windows get their status cleared instead.
+    """
+    from .callback_data import IDLE_STATUS_TEXT
     from .message_queue import enqueue_status_update
     from .topic_emoji import update_topic_emoji
 
@@ -114,9 +116,6 @@ async def _handle_stop(event: HookEvent, bot: Bot) -> None:
     if not users:
         return
 
-    import time
-
-    now = time.monotonic()
     stop_reason = event.data.get("stop_reason", "")
     logger.debug(
         "Hook stop: window_key=%s, stop_reason=%s",
@@ -125,12 +124,16 @@ async def _handle_stop(event: HookEvent, bot: Bot) -> None:
     )
 
     for user_id, thread_id, window_id in users:
-        clear_seen_status(window_id)
         chat_id = session_manager.resolve_chat_id(user_id, thread_id)
         display = session_manager.get_display_name(window_id)
-        await update_topic_emoji(bot, chat_id, thread_id, "done", display)
-        _start_autoclose_timer(user_id, thread_id, "done", now)
-        await enqueue_status_update(bot, user_id, window_id, None, thread_id=thread_id)
+        await update_topic_emoji(bot, chat_id, thread_id, "idle", display)
+        notif_mode = session_manager.get_notification_mode(window_id)
+        status_text = (
+            None if notif_mode in ("muted", "errors_only") else IDLE_STATUS_TEXT
+        )
+        await enqueue_status_update(
+            bot, user_id, window_id, status_text, thread_id=thread_id
+        )
 
 
 # Track active subagents per window: window_id -> {subagent_id -> name}

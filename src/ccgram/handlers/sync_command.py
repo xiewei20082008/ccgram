@@ -345,7 +345,7 @@ async def _recreate_dead_topics(bot: Bot, issues: list[AuditIssue]) -> int:
         try:
             await _handle_new_window(event, bot)
             recreated += 1
-        except Exception:
+        except TelegramError, OSError:
             logger.exception("Failed to recreate topic for window %s", window_id)
             # Restore binding so the window isn't orphaned
             session_manager.bind_thread(user_id, thread_id, window_id, window_name=name)
@@ -406,7 +406,10 @@ async def handle_sync_fix(query: CallbackQuery) -> None:
     recreated_count = await _recreate_dead_topics(bot, pre_audit.issues)
     await _adopt_orphaned_windows(bot, pre_audit.issues)
 
-    # Re-audit and compute actual fixed count (handles partial failures)
+    # Re-audit and compute actual fixed count (handles partial failures).
+    # No skip_threads here: successful recreations use a new thread_id (old
+    # one is unbound and won't be probed), while failed ones restore the old
+    # binding and must be re-probed to avoid inflating actual_fixed.
     post_audit = await _run_audit()
     post_dead = await _probe_dead_topics(bot)
     post_audit.issues.extend(post_dead)
