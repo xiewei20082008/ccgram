@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [2.4.1] - 2026-03-28
+
+### Fixed
+- Handle NetworkError as transient in bot error handler
+- Eliminate status message and topic rename noise on Stop events ([#46](https://github.com/alexei-led/ccgram/pull/46))
+
 ## [2.4.0] - 2026-03-28
 
 ### Added
@@ -12,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 - Update CHANGELOG.md for v2.3.5
+- Update CHANGELOG.md for v2.4.0
 
 
 ### Fixed
