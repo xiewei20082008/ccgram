@@ -299,17 +299,17 @@ NOT a separate registry file. Discovery reads from SessionManager + session_map 
 
 Click group with subcommands for all operations. Following existing pattern (cli.py + msg_cmd.py).
 
-- [ ] write tests for CLI help and subcommand routing: `ccgram msg --help`, `ccgram msg list-peers --help`
-- [ ] write tests for `list-peers` command: table output, `--json` output, empty state
-- [ ] write tests for `find` command: filter by provider, team, cwd pattern
-- [ ] write tests for `send` command: basic send, `--notify`, `--wait`, `--ttl`, `--file`
-- [ ] write tests for `inbox` command: show pending, `--json`, empty inbox
-- [ ] write tests for `read` command: mark message read, unknown msg-id error
-- [ ] write tests for `reply` command: create reply, link to original, `--file`
-- [ ] write tests for `broadcast` command: send to all, filtered by team/provider/cwd
-- [ ] write tests for `register` command: set task/team, update task
-- [ ] write tests for `sweep` command: clean expired, `--force` cleans all read
-- [ ] implement `src/ccgram/msg_cmd.py`:
+- [x] write tests for CLI help and subcommand routing: `ccgram msg --help`, `ccgram msg list-peers --help`
+- [x] write tests for `list-peers` command: table output, `--json` output, empty state
+- [x] write tests for `find` command: filter by provider, team, cwd pattern
+- [x] write tests for `send` command: basic send, `--notify`, `--wait`, `--ttl`, `--file`
+- [x] write tests for `inbox` command: show pending, `--json`, empty inbox
+- [x] write tests for `read` command: mark message read, unknown msg-id error
+- [x] write tests for `reply` command: create reply, link to original, `--file`
+- [x] write tests for `broadcast` command: send to all, filtered by team/provider/cwd
+- [x] write tests for `register` command: set task/team, update task
+- [x] write tests for `sweep` command: clean expired, `--force` cleans all read
+- [x] implement `src/ccgram/msg_cmd.py`:
   - `msg_main` Click group
   - Subcommands: `list-peers`, `find`, `send`, `inbox`, `read`, `reply`, `broadcast`, `register`, `sweep`
   - Window self-identification: `CCGRAM_WINDOW_ID` env var (primary), tmux runtime detection (fallback)
@@ -317,8 +317,8 @@ Click group with subcommands for all operations. Following existing pattern (cli
   - `--wait` deadlock prevention: fail if sender already has pending outbound `--wait`
   - Message rate limiting: max `CCGRAM_MSG_RATE_LIMIT` per window per 5 min
   - All output: table format (human) or `--json` (machine)
-- [ ] register `msg` group in `src/ccgram/cli.py` (add to cli group, lazy import pattern)
-- [ ] run `make fmt && make test && make lint` — must pass
+- [x] register `msg` group in `src/ccgram/cli.py` (add to cli group, lazy import pattern)
+- [x] run `make fmt && make test && make lint` — must pass
 
 ### Task 4: Config extensions
 

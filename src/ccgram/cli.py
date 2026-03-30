@@ -234,6 +234,21 @@ def status_cmd() -> None:
 # --- doctor command --------------------------------------------------------
 
 
+# --- msg command group -----------------------------------------------------
+
+
+def _register_msg_group() -> None:
+    from .msg_cmd import msg_group
+
+    cli.add_command(msg_group, "msg")
+
+
+_register_msg_group()
+
+
+# --- doctor command --------------------------------------------------------
+
+
 @cli.command("doctor")
 @click.option("--fix", is_flag=True, help="Auto-fix issues where possible.")
 def doctor_cmd(fix: bool) -> None:
