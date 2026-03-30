@@ -340,16 +340,16 @@ Add new env vars to Config for all messaging settings.
 
 The active delivery layer. Piggybacks on existing poll loop. Injects messages into idle agent windows. **Follow `TerminalStatusStrategy` pattern** from `polling_strategies.py` for state management. **Follow `polling_coordinator.py` pattern** for loop resilience (exponential backoff, top-level error catch).
 
-- [ ] write tests for broker delivery logic: detect idle → select pending message → format → deliver
-- [ ] write tests for shell topic safety: messages to shell windows are NOT delivered via send_keys
-- [ ] write tests for provider-specific idle detection: Claude (Stop hook), Codex/Gemini (activity heuristic)
-- [ ] write tests for `delivered_at` timestamp: set on successful injection
-- [ ] write tests for message rate limiting enforcement in broker
-- [ ] write tests for broadcast skip: broadcast-type messages are never injected via send_keys
-- [ ] write tests for message merging: multiple pending messages merged into one send_keys call
-- [ ] write tests for injection format: single-line, 500 char cap, file reference for long bodies
-- [ ] write tests for loop detection: 5+ exchanges between same pair in 10 min → pause + alert
-- [ ] implement `src/ccgram/handlers/msg_broker.py`:
+- [x] write tests for broker delivery logic: detect idle → select pending message → format → deliver
+- [x] write tests for shell topic safety: messages to shell windows are NOT delivered via send_keys
+- [x] write tests for provider-specific idle detection: Claude (Stop hook), Codex/Gemini (activity heuristic)
+- [x] write tests for `delivered_at` timestamp: set on successful injection
+- [x] write tests for message rate limiting enforcement in broker
+- [x] write tests for broadcast skip: broadcast-type messages are never injected via send_keys
+- [x] write tests for message merging: multiple pending messages merged into one send_keys call
+- [x] write tests for injection format: single-line, 500 char cap, file reference for long bodies
+- [x] write tests for loop detection: 5+ exchanges between same pair in 10 min → pause + alert
+- [x] implement `src/ccgram/handlers/msg_broker.py`:
   - `MessageDeliveryStrategy` class following `TerminalStatusStrategy` pattern: state-owning with `get_state(window_id)`, `clear_state(window_id)`, module-level singleton. Tracks per-window delivery state (pending count, last delivery time, rate counters, loop detection counters)
   - `async def broker_delivery_cycle(bot)` — called from poll loop with exponential backoff (`_BACKOFF_MIN`/`_BACKOFF_MAX`), top-level `_LoopError` catch. Checks all inboxes for pending messages
   - For each idle window with pending messages:
@@ -363,17 +363,17 @@ The active delivery layer. Piggybacks on existing poll loop. Injects messages in
   - Rate limiting: track sends per window, enforce `CCGRAM_MSG_RATE_LIMIT`
   - Loop detection: track message counts between window pairs, pause at threshold
   - At-least-once delivery: if crash after send_keys but before `delivered_at` write, message is re-injected on next cycle (acceptable — UUID prevents ambiguity)
-- [ ] write tests for crash recovery: pending messages without `delivered_at` (older than 5s) are re-injected on startup
-- [ ] integrate into `src/ccgram/handlers/polling_coordinator.py`:
+- [x] write tests for crash recovery: pending messages without `delivered_at` (older than 5s) are re-injected on startup
+- [x] integrate into `src/ccgram/handlers/polling_coordinator.py`:
   - Add `broker_delivery_cycle()` call in main poll loop (every cycle or every N seconds)
   - Add periodic `mailbox.sweep()` call (every 5 minutes, time-gated like topic check)
-- [ ] integrate idle detection from hook events: extend `_handle_stop()` in `hook_events.py` to trigger immediate broker delivery check for that window
-- [ ] integrate recovery hooks into existing lifecycle:
+- [x] integrate idle detection from hook events: extend `_handle_stop()` in `hook_events.py` to trigger immediate broker delivery check for that window
+- [x] integrate recovery hooks into existing lifecycle:
   - `session.resolve_stale_ids()` → call `mailbox.migrate_ids(remap_dict)` for dir renames
   - `session.prune_stale_state()` → call `mailbox.prune_dead(live_ids)` to remove dead window mailboxes
   - `handlers/cleanup.clear_topic_state()` → clear declared overlay entry + sweep window inbox (lazy import pattern)
   - `bot.post_shutdown()` → flush any pending mailbox state (after monitor.stop(), before state flush)
-- [ ] run `make fmt && make test && make lint` — must pass
+- [x] run `make fmt && make test && make lint` — must pass
 
 ### Task 6: Telegram integration — visibility and notifications
 

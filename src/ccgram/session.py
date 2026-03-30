@@ -188,6 +188,40 @@ class ClaudeSession:
     file_path: str
 
 
+def _migrate_mailbox_ids(
+    old_display: dict[str, str],
+    new_states: dict[str, "WindowState"],
+    tmux_session: str,
+) -> None:
+    """Migrate mailbox directories when window IDs change after tmux restart.
+
+    Builds a remap dict by matching old→new IDs via display name, then
+    renames mailbox directories to match.
+    """
+    # Build new key→display_name from current window_display_names
+    new_display = {
+        wid: thread_router.window_display_names.get(wid, "") for wid in new_states
+    }
+    # Invert new display → new_id
+    display_to_new: dict[str, str] = {}
+    for wid, name in new_display.items():
+        if name:
+            display_to_new[name] = wid
+
+    remap: dict[str, str] = {}
+    for old_id, name in old_display.items():
+        if not name or old_id in new_states:
+            continue
+        new_id = display_to_new.get(name)
+        if new_id and new_id != old_id:
+            remap[f"{tmux_session}:{old_id}"] = f"{tmux_session}:{new_id}"
+
+    if remap:
+        from .mailbox import Mailbox
+
+        Mailbox(config.mailbox_dir).migrate_ids(remap)
+
+
 @dataclass
 class SessionManager:
     """Manages session state for Claude Code.
@@ -311,6 +345,7 @@ class SessionManager:
 
         Called on startup. Delegates to window_resolver for the heavy lifting.
         Dead window bindings and states are preserved for /restore recovery.
+        Also migrates mailbox directories when window IDs change.
         """
         from .window_resolver import LiveWindow, resolve_stale_ids as _resolve
 
@@ -319,6 +354,13 @@ class SessionManager:
             LiveWindow(window_id=w.window_id, window_name=w.window_name)
             for w in windows
         ]
+
+        # Snapshot old key→display_name mapping for mailbox migration
+        tmux_session = config.tmux_session_name
+        old_display = {
+            wid: thread_router.window_display_names.get(wid, "")
+            for wid in self.window_states
+        }
 
         changed = _resolve(
             live,
@@ -332,6 +374,9 @@ class SessionManager:
             thread_router._rebuild_reverse_index()
             self._save_state()
             logger.info("Startup re-resolution complete")
+
+            # Migrate mailbox directories for remapped window IDs
+            _migrate_mailbox_ids(old_display, self.window_states, tmux_session)
 
         self._needs_migration = False
 
@@ -452,6 +497,14 @@ class SessionManager:
         # Prune stale byte offsets (independent of display/chat pruning)
         all_known = live_window_ids | in_use
         offsets_changed = self.prune_stale_offsets(all_known)
+
+        # Prune dead mailbox directories
+        qualified_live = {
+            f"{config.tmux_session_name}:{wid}" for wid in live_window_ids
+        }
+        from .mailbox import Mailbox
+
+        Mailbox(config.mailbox_dir).prune_dead(qualified_live)
 
         if not stale_display and not stale_chat:
             return offsets_changed

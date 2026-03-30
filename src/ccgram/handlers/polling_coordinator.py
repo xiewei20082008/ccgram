@@ -79,6 +79,12 @@ logger = structlog.get_logger()
 STATUS_POLL_INTERVAL = 1.0  # seconds
 TOPIC_CHECK_INTERVAL = 60.0  # seconds
 
+# Broker delivery cycle interval (seconds)
+_BROKER_CYCLE_INTERVAL = 2.0
+
+# Mailbox sweep interval (seconds)
+_SWEEP_INTERVAL = 300.0
+
 # Exponential backoff bounds for loop errors (seconds)
 _BACKOFF_MIN = 2.0
 _BACKOFF_MAX = 30.0
@@ -822,13 +828,65 @@ async def update_status_message(
         )
 
 
+# ── Broker integration ────────────────────────────────────────────────────
+
+
+async def _run_broker_cycle() -> None:
+    """Run one broker delivery cycle (called from poll loop)."""
+    from .msg_broker import broker_delivery_cycle
+
+    from ..mailbox import Mailbox
+
+    mailbox = Mailbox(config.mailbox_dir)
+    await broker_delivery_cycle(
+        mailbox=mailbox,
+        tmux_mgr=tmux_manager,
+        window_states=session_manager.window_states,
+        tmux_session=config.tmux_session_name,
+        msg_rate_limit=config.msg_rate_limit,
+        mailbox_dir=config.mailbox_dir,
+    )
+
+
+def _run_mailbox_sweep() -> None:
+    """Run periodic mailbox sweep (called from poll loop)."""
+    from ..mailbox import Mailbox
+
+    mailbox = Mailbox(config.mailbox_dir)
+    removed = mailbox.sweep()
+    if removed:
+        logger.debug("Mailbox sweep removed %d messages", removed)
+
+
 # ── Main loop ─────────────────────────────────────────────────────────────
+
+
+async def _run_periodic_tasks(
+    bot: Bot,
+    all_windows: list["TmuxWindow"],
+    timers: dict[str, float],
+) -> None:
+    """Run time-gated periodic tasks (topic check, broker, sweep)."""
+    now = time.monotonic()
+    if now - timers["topic_check"] >= TOPIC_CHECK_INTERVAL:
+        timers["topic_check"] = now
+        await _prune_stale_state(all_windows)
+        await _probe_topic_existence(bot)
+        log_throttle_sweep()
+
+    if now - timers["broker"] >= _BROKER_CYCLE_INTERVAL:
+        timers["broker"] = now
+        await _run_broker_cycle()
+
+    if now - timers["sweep"] >= _SWEEP_INTERVAL:
+        timers["sweep"] = now
+        _run_mailbox_sweep()
 
 
 async def status_poll_loop(bot: Bot) -> None:
     """Background task to poll terminal status for all thread-bound windows."""
     logger.info("Status polling started (interval: %ss)", STATUS_POLL_INTERVAL)
-    last_topic_check = 0.0
+    timers = {"topic_check": 0.0, "broker": 0.0, "sweep": 0.0}
     _error_streak = 0
     while True:
         try:
@@ -839,12 +897,7 @@ async def status_poll_loop(bot: Bot) -> None:
                 w.window_id: w for w in all_windows
             }
 
-            now = time.monotonic()
-            if now - last_topic_check >= TOPIC_CHECK_INTERVAL:
-                last_topic_check = now
-                await _prune_stale_state(all_windows)
-                await _probe_topic_existence(bot)
-                log_throttle_sweep()
+            await _run_periodic_tasks(bot, all_windows, timers)
 
             for user_id, thread_id, wid in list(thread_router.iter_thread_bindings()):
                 structlog.contextvars.clear_contextvars()

@@ -916,6 +916,11 @@ async def post_shutdown(_application: Application) -> None:
     # Stop all queue workers after monitor is stopped
     await shutdown_workers()
 
+    # Sweep expired mailbox messages before final state flush
+    from .mailbox import Mailbox
+
+    Mailbox(config.mailbox_dir).sweep()
+
     # Flush debounced state to disk AFTER workers/monitor stop (captures final mutations)
     session_manager.flush_state()
 
