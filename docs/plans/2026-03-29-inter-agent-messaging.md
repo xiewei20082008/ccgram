@@ -38,7 +38,7 @@ Add agent-to-agent messaging to ccgram, allowing AI coding agents running in dif
 - **Thread routing:** Extracted to `thread_router.py` — topic↔window binding lookups now separate from SessionManager. Reverse index: `get_thread_for_window(user_id, window_id)` is O(1)
 - **Hook events:** `HookEvent` dataclass → `dispatch_hook_event()` switch in `handlers/hook_events.py` — unchanged
 - **Callback registration:** New `handlers/callback_registry.py` with self-registration pattern and longest-prefix matching (use for spawn approval callbacks: `sp:ok:*`, `sp:no:*`, loop alert: `ml:pause:*`, `ml:allow:*`)
-- **Protocols:** `protocols.py` defines Protocol interfaces for SessionManager consumers (messaging module depends on Protocol, not concrete class)
+- **No protocols.py:** Protocol interfaces were created and deleted during PR #47 (unused). Messaging module imports concrete classes directly (SessionManager, ThreadRouter) — same pattern as all other modules
 - **Tests:** CliRunner for CLI, pytest fixtures, tests mirror source layout in `tests/ccgram/`
 
 ### Reusable patterns to leverage (DO NOT reinvent)
@@ -52,7 +52,7 @@ Add agent-to-agent messaging to ccgram, allowing AI coding agents running in dif
 | **Message queue + merging**                | `handlers/message_queue.py`                           | Route inter-agent Telegram notifications through existing `enqueue_content_message()` — automatic FIFO ordering, merging, rate limiting, dead worker respawning             |
 | **Entity-based formatting + silent send**  | `entity_formatting.py` + `handlers/message_sender.py` | Use `safe_send()` with `disable_notification=True` for all inter-agent Telegram messages. Entity fallback chain handles parse errors. `rate_limit_send()` per-chat          |
 | **Poll loop resilience**                   | `handlers/polling_coordinator.py`                     | Follow exponential backoff pattern (`_BACKOFF_MIN`/`_BACKOFF_MAX`) for broker delivery loop. Top-level `_LoopError` catch keeps loop alive                                  |
-| **Protocol interfaces**                    | `protocols.py`                                        | Define narrow `MessageBrokerProtocol` for messaging consumers — testable without concrete SessionManager dependency                                                         |
+| **Direct imports (no Protocol layer)**     | `session.py`, `thread_router.py`                      | Import concrete singletons directly (`session_manager`, `thread_router`) — same pattern as all handler modules. Test via monkeypatch, not Protocol abstraction              |
 
 ### Files/components involved
 
