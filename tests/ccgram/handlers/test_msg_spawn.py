@@ -354,3 +354,67 @@ class TestClearSpawnState:
         assert any(
             r.requester_window == "ccgram:@5" for r in _pending_requests.values()
         )
+
+
+class TestSkillInstallOnSpawn:
+    async def test_claude_spawn_installs_skill(self, tmp_path):
+        mock_bot = AsyncMock()
+        mock_tmux = AsyncMock()
+        mock_tmux.create_window = AsyncMock(return_value=(True, "ok", "project", "@7"))
+
+        req = create_spawn_request(
+            requester_window="ccgram:@0",
+            provider="claude",
+            cwd=str(tmp_path),
+            prompt="test",
+        )
+
+        with (
+            patch("ccgram.handlers.msg_spawn.tmux_manager", mock_tmux),
+            patch("ccgram.handlers.msg_spawn.session_manager") as mock_sm,
+            patch(
+                "ccgram.handlers.msg_spawn.resolve_launch_command",
+                return_value="claude",
+            ),
+            patch(
+                "ccgram.handlers.msg_spawn._create_topic_for_spawn",
+                new_callable=AsyncMock,
+            ),
+        ):
+            mock_sm.window_states = {}
+            mock_sm.get_window_state.return_value = MagicMock(cwd="", provider_name="")
+            await handle_spawn_approval(req.id, mock_bot)
+
+        skill_path = tmp_path / ".claude" / "skills" / "ccgram-messaging" / "SKILL.md"
+        assert skill_path.exists()
+
+    async def test_non_claude_spawn_skips_skill(self, tmp_path):
+        mock_bot = AsyncMock()
+        mock_tmux = AsyncMock()
+        mock_tmux.create_window = AsyncMock(return_value=(True, "ok", "project", "@7"))
+
+        req = create_spawn_request(
+            requester_window="ccgram:@0",
+            provider="codex",
+            cwd=str(tmp_path),
+            prompt="test",
+        )
+
+        with (
+            patch("ccgram.handlers.msg_spawn.tmux_manager", mock_tmux),
+            patch("ccgram.handlers.msg_spawn.session_manager") as mock_sm,
+            patch(
+                "ccgram.handlers.msg_spawn.resolve_launch_command",
+                return_value="codex",
+            ),
+            patch(
+                "ccgram.handlers.msg_spawn._create_topic_for_spawn",
+                new_callable=AsyncMock,
+            ),
+        ):
+            mock_sm.window_states = {}
+            mock_sm.get_window_state.return_value = MagicMock(cwd="", provider_name="")
+            await handle_spawn_approval(req.id, mock_bot)
+
+        skill_path = tmp_path / ".claude" / "skills" / "ccgram-messaging" / "SKILL.md"
+        assert not skill_path.exists()

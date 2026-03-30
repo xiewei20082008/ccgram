@@ -440,21 +440,21 @@ Agents request new agent instances. Requires Telegram approval by default. **Reu
 
 Install messaging skill prompt to Claude Code agents so they check inbox on idle.
 
-- [ ] write tests for skill file generation: correct prompt content, correct path
-- [ ] write tests for skill installation: writes to correct directory, idempotent
-- [ ] write tests for skill content: includes register, inbox check, send, broadcast instructions
-- [ ] implement `src/ccgram/msg_skill.py`:
+- [x] write tests for skill file generation: correct prompt content, correct path
+- [x] write tests for skill installation: writes to correct directory, idempotent
+- [x] write tests for skill content: includes register, inbox check, send, broadcast instructions
+- [x] implement `src/ccgram/msg_skill.py`:
   - `SKILL_CONTENT` — prompt text teaching the agent about messaging:
     - Register on start: `ccgram msg register --task "..." --team "..."`
     - Check inbox on idle: `ccgram msg inbox`
     - **Critical: summarize peer messages to user and ask before processing** — "I have N requests from other agents. Should I handle these?" (prevents agent being "hijacked" by peer messages without user consent)
     - Exception: `--auto` spawned agents (no user topic) process immediately
     - Send/find/broadcast/spawn commands
-  - `install_skill(cwd: Path)` — write skill file to `{cwd}/.claude/skills/ccgram-messaging.md` (per-project, scoped)
-  - `ensure_skill_installed(window_id)` — check if skill exists for window's cwd, install if missing
+  - `install_skill(cwd: Path)` — write skill file to `{cwd}/.claude/skills/ccgram-messaging/SKILL.md` (per-project, scoped)
+  - `ensure_skill_installed(cwd)` — check if skill exists for window's cwd, install if missing
   - Idempotent: skip if file already exists with same content
-- [ ] integrate skill install into spawn flow (Task 8) and optionally into topic creation for Claude windows
-- [ ] run `make fmt && make test && make lint` — must pass
+- [x] integrate skill install into spawn flow (Task 8) and optionally into topic creation for Claude windows
+- [x] run `make fmt && make test && make lint` — must pass
 
 ### Task 10: Window self-identification
 

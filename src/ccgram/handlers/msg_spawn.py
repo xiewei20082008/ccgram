@@ -155,6 +155,11 @@ async def handle_spawn_approval(
 
     await _create_topic_for_spawn(bot, window_id, window_name, req)
 
+    if req.provider == "claude":
+        from ..msg_skill import ensure_skill_installed
+
+        ensure_skill_installed(req.cwd)
+
     if req.prompt:
         prompt_text = req.prompt
         if req.context_file:
