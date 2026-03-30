@@ -79,6 +79,7 @@ class Config:
         self.session_map_file = self.config_dir / "session_map.json"
         self.monitor_state_file = self.config_dir / "monitor_state.json"
         self.events_file = self.config_dir / "events.jsonl"
+        self.mailbox_dir = self.config_dir / "mailbox"
 
         # Claude Code session monitoring configuration
         _claude_config_dir = os.getenv("CLAUDE_CONFIG_DIR")

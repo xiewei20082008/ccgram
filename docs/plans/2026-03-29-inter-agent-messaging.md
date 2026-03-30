@@ -252,13 +252,13 @@ Example output (merged view):
 
 The foundation. File-based mailbox with atomic writes, message CRUD, TTL support. Uses qualified window IDs (`session:@N`) matching session_map convention.
 
-- [ ] write tests for `Mailbox` class: create inbox dir, write message, read message, list messages, acknowledge
-- [ ] write tests for qualified ID paths: `ccgram:@0/`, `emdash-claude-main-abc:@0/` — no bare `@N`
-- [ ] write tests for message ordering: `inbox()` returns FIFO by timestamp-prefixed filename
-- [ ] write tests for atomic write safety: partial write recovery, concurrent read during write
-- [ ] write tests for TTL expiration: message expires after ttl_minutes, expired messages filtered from inbox
-- [ ] write tests for message status transitions: pending → read → replied; pending → expired
-- [ ] implement `src/ccgram/mailbox.py`:
+- [x] write tests for `Mailbox` class: create inbox dir, write message, read message, list messages, acknowledge
+- [x] write tests for qualified ID paths: `ccgram:@0/`, `emdash-claude-main-abc:@0/` — no bare `@N`
+- [x] write tests for message ordering: `inbox()` returns FIFO by timestamp-prefixed filename
+- [x] write tests for atomic write safety: partial write recovery, concurrent read during write
+- [x] write tests for TTL expiration: message expires after ttl_minutes, expired messages filtered from inbox
+- [x] write tests for message status transitions: pending → read → replied; pending → expired
+- [x] implement `src/ccgram/mailbox.py`:
   - `Mailbox` class with `base_dir` (default `~/.ccgram/mailbox/`)
   - `send(from_id, to_id, body, type, subject, ttl_minutes, reply_to, file_path)` → writes msg JSON to `{to_id}/{timestamp}-{short_uuid}.json` via atomic write (tmp + rename)
   - `inbox(window_id)` → list pending messages for window, sorted by filename (FIFO), filtered by TTL
@@ -272,11 +272,11 @@ The foundation. File-based mailbox with atomic writes, message CRUD, TTL support
   - Auto-attach context (cwd from session_map, branch from `git rev-parse`, provider from session_manager)
   - Body size limit: 10KB hard cap, `--file` for larger payloads (stores path reference)
   - All directory scans via `os.scandir()` (batches readdir + stat)
-- [ ] write tests for `--file` support: body loaded from file path, 10KB limit enforcement
-- [ ] write tests for FileNotFoundError resilience: sweep deletes file while reader iterates — no crash
-- [ ] write tests for `prune_dead()`: removes dirs for dead windows, preserves foreign (emdash) windows
-- [ ] write tests for `pending_undelivered()`: returns only messages older than min_age without delivered_at
-- [ ] run `make fmt && make test && make lint` — must pass
+- [x] write tests for `--file` support: body loaded from file path, 10KB limit enforcement
+- [x] write tests for FileNotFoundError resilience: sweep deletes file while reader iterates — no crash
+- [x] write tests for `prune_dead()`: removes dirs for dead windows, preserves foreign (emdash) windows
+- [x] write tests for `pending_undelivered()`: returns only messages older than min_age without delivered_at
+- [x] run `make fmt && make test && make lint` — must pass
 
 ### Task 2: Peer discovery (view over existing state + self-declared overlay)
 
