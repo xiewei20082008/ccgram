@@ -12,6 +12,8 @@ Functions:
 
 from collections import deque
 
+from .topic_state_registry import topic_state
+
 HISTORY_MAX = 20
 
 # Telegram switch_inline_query_current_chat limit (256 UTF-8 chars)
@@ -49,6 +51,7 @@ def get_history(user_id: int, thread_id: int, *, limit: int = 20) -> list[str]:
     return list(reversed(dq))[:limit]
 
 
+@topic_state.register("topic")
 def clear_history(user_id: int, thread_id: int) -> None:
     """Remove history entry for a topic."""
     _history.pop((user_id, thread_id), None)

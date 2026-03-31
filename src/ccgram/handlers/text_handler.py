@@ -38,6 +38,7 @@ from .message_sender import (
 )
 from .recovery_callbacks import build_recovery_keyboard
 from .polling_strategies import clear_probe_failures
+from .topic_state_registry import topic_state
 from .user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT, RECOVERY_WINDOW_ID
 from ..session import session_manager
 from ..thread_router import thread_router
@@ -54,6 +55,7 @@ _BASH_OUTPUT_LIMIT = 3800
 _bash_capture_tasks: dict[tuple[int, int], asyncio.Task[None]] = {}
 
 
+@topic_state.register("topic")
 def cancel_bash_capture(user_id: int, thread_id: int) -> None:
     """Cancel any running bash capture for this topic."""
     key = (user_id, thread_id)

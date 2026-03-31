@@ -14,12 +14,7 @@ from telegram import Bot
 
 from ..utils import log_throttle_reset
 from .interactive_ui import clear_interactive_msg
-from .message_queue import (
-    clear_batch_for_topic,
-    clear_status_msg_info,
-    clear_tool_msg_ids_for_topic,
-    enqueue_status_update,
-)
+from .message_queue import enqueue_status_update
 from .topic_emoji import clear_topic_emoji_state
 from .user_state import PENDING_THREAD_ID, PENDING_THREAD_TEXT, VOICE_PENDING
 
@@ -78,17 +73,11 @@ async def clear_topic_state(
     Also cleans up status messages, tool tracking, interactive UI, emoji,
     command history, and user_data pending state.
     """
-    # Clear status message from Telegram (if bot available) or just tracking
+    # Clear status message from Telegram (if bot available)
     if bot is not None:
         await enqueue_status_update(
             bot, user_id, window_id or "", None, thread_id=thread_id
         )
-    else:
-        clear_status_msg_info(user_id, thread_id)
-
-    # Clear tool message ID tracking and active batch
-    clear_tool_msg_ids_for_topic(user_id, thread_id)
-    clear_batch_for_topic(user_id, thread_id)
 
     # Clear poll state (lazy import to avoid circular dep)
     from .polling_strategies import clear_dead_notification, clear_topic_poll_state
@@ -107,16 +96,10 @@ async def clear_topic_state(
     chat_id = thread_router.resolve_chat_id(user_id, thread_id)
     clear_topic_emoji_state(chat_id, thread_id)
 
-    # Clear command history, bash capture, shell pending, send cooldowns
-    from .command_history import clear_history
-    from .interactive_ui import clear_send_cooldowns
+    # Clear shell pending (not yet migrated to registry)
     from .shell_commands import clear_shell_pending
-    from .text_handler import cancel_bash_capture
 
-    clear_history(user_id, thread_id)
-    cancel_bash_capture(user_id, thread_id)
     clear_shell_pending(chat_id, thread_id)
-    clear_send_cooldowns(user_id, thread_id)
 
     # Clear per-chat state (topic creation retry, disabled emoji chats)
     if chat_id:

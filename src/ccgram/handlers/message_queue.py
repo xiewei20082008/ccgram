@@ -28,6 +28,7 @@ import contextlib
 
 from ..session import session_manager
 from ..thread_router import thread_router
+from .topic_state_registry import topic_state
 from ..utils import task_done_callback
 from .callback_data import (
     CB_STATUS_ESC,
@@ -867,17 +868,20 @@ async def enqueue_status_update(
     queue.put_nowait(task)
 
 
+@topic_state.register("topic")
 def clear_status_msg_info(user_id: int, thread_id: int | None = None) -> None:
     """Clear status message tracking for a user (and optionally a specific thread)."""
     skey = (user_id, thread_id or 0)
     _status_msg_info.pop(skey, None)
 
 
+@topic_state.register("topic")
 def clear_batch_for_topic(user_id: int, thread_id: int | None = None) -> None:
     """Clear active batch for a specific topic (called on topic cleanup)."""
     _active_batches.pop((user_id, thread_id or 0), None)
 
 
+@topic_state.register("topic")
 def clear_tool_msg_ids_for_topic(user_id: int, thread_id: int | None = None) -> None:
     """Clear tool message ID tracking for a specific topic.
 

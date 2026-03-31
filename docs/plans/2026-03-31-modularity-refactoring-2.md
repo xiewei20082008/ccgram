@@ -344,11 +344,11 @@ Create the registry module. Keep existing explicit cleanup calls in `cleanup.py`
 
 Migrate modules that use `(user_id, thread_id)` key. After each migration, remove the explicit call from `cleanup.py`.
 
-- [ ] `handlers/message_queue.py`: register `clear_tool_msg_ids_for_topic`, `clear_status_msg_info`, `clear_batch_for_topic` with `@topic_state.register("topic")`; remove 3 explicit calls from `cleanup.py`
-- [ ] `handlers/interactive_ui.py`: register `clear_interactive_msg`, `clear_send_cooldowns` with `@topic_state.register("topic")`; remove from `cleanup.py`
-- [ ] `handlers/command_history.py`: register `clear_history` with `@topic_state.register("topic")`; remove from `cleanup.py`
-- [ ] `handlers/text_handler.py`: register `cancel_bash_capture` with `@topic_state.register("topic")`; remove from `cleanup.py`
-- [ ] `make check` — must pass
+- [x] `handlers/message_queue.py`: register `clear_tool_msg_ids_for_topic`, `clear_status_msg_info`, `clear_batch_for_topic` with `@topic_state.register("topic")`; remove 3 explicit calls from `cleanup.py`
+- [x] `handlers/interactive_ui.py`: register `clear_send_cooldowns` with `@topic_state.register("topic")`; `clear_interactive_msg` is async+bot so stays as explicit call in cleanup.py
+- [x] `handlers/command_history.py`: register `clear_history` with `@topic_state.register("topic")`; remove from `cleanup.py`
+- [x] `handlers/text_handler.py`: register `cancel_bash_capture` with `@topic_state.register("topic")`; remove from `cleanup.py`
+- [x] `make check` — must pass
 
 #### Task 9c: Migrate handlers to self-register (batch 2 — window-scoped)
 

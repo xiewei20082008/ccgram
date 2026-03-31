@@ -25,6 +25,7 @@ from telegram.error import BadRequest, RetryAfter, TelegramError
 from ..providers import get_provider_for_window
 from ..thread_router import thread_router
 from ..tmux_manager import tmux_manager
+from .topic_state_registry import topic_state
 from .callback_data import (
     CB_ASK_DOWN,
     CB_ASK_ENTER,
@@ -62,6 +63,7 @@ _SEND_RETRY_INTERVAL = 5.0  # seconds between retries for failed sends
 _DEAD_TOPIC_RETRY_INTERVAL = 60.0  # longer backoff when topic is deleted
 
 
+@topic_state.register("topic")
 def clear_send_cooldowns(user_id: int, thread_id: int) -> None:
     """Clear send cooldown for this topic (called on topic cleanup)."""
     _send_cooldowns.pop((user_id, thread_id or 0), None)

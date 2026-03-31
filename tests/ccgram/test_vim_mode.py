@@ -352,7 +352,6 @@ class TestPollingAndCleanupIntegration:
             patch("ccgram.handlers.cleanup.enqueue_status_update"),
             patch("ccgram.handlers.cleanup.clear_interactive_msg"),
             patch("ccgram.handlers.cleanup.clear_topic_emoji_state"),
-            patch("ccgram.handlers.cleanup.clear_tool_msg_ids_for_topic"),
             patch("ccgram.thread_router.thread_router") as mock_tr,
         ):
             mock_tr.resolve_chat_id.return_value = -100
@@ -368,7 +367,6 @@ class TestPollingAndCleanupIntegration:
             patch("ccgram.handlers.cleanup.enqueue_status_update"),
             patch("ccgram.handlers.cleanup.clear_interactive_msg"),
             patch("ccgram.handlers.cleanup.clear_topic_emoji_state"),
-            patch("ccgram.handlers.cleanup.clear_tool_msg_ids_for_topic"),
             patch("ccgram.thread_router.thread_router") as mock_tr,
         ):
             mock_tr.resolve_chat_id.return_value = -100
