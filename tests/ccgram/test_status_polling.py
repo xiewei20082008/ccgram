@@ -277,7 +277,7 @@ class TestStartupTimeout:
         from ccgram.handlers.polling_coordinator import _handle_no_status
 
         bot = AsyncMock(spec=Bot)
-        terminal_strategy.get_state("@0").startup_time = 1000.0
+        terminal_strategy.get_state("@0").startup_time = time.monotonic() - 31.0
         with (
             patch("ccgram.handlers.polling_coordinator.thread_router") as mock_tr,
             patch(
@@ -288,9 +288,7 @@ class TestStartupTimeout:
                 "ccgram.handlers.polling_coordinator._check_transcript_activity",
                 return_value=False,
             ),
-            patch("ccgram.handlers.polling_coordinator.time") as mock_time,
         ):
-            mock_time.monotonic.return_value = 1000.0 + 31.0
             mock_tr.resolve_chat_id.return_value = -100
             mock_tr.get_display_name.return_value = "project"
             await _handle_no_status(bot, 1, "@0", 42, "node", "normal")
