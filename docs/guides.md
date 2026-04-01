@@ -33,7 +33,7 @@ Recommended local development model:
 Use the helper script:
 
 ```bash
-./scripts/restart.sh start      # fresh start; creates ccgram:__main__ if missing
+./scripts/restart.sh start      # fresh start; creates ccgram:__main__ if missing and installs Claude hooks
 ./scripts/restart.sh status     # show current command + last logs
 ./scripts/restart.sh restart    # sends Ctrl-C to control pane (supervisor restarts)
 ./scripts/restart.sh stop       # sends Ctrl-\ to control pane (supervisor exits)
@@ -53,7 +53,7 @@ If you are starting from scratch:
 3. `tmux attach -t ccgram`
 4. In another terminal (or another pane), open your agent windows in the same tmux session.
 
-The `start` command creates the tmux session/window if they do not exist, so no manual tmux bootstrap is required.
+The `start` command creates the tmux session/window if they do not exist, installs or updates Claude hooks, and then launches the supervisor. No manual tmux bootstrap is required.
 
 ## Testing
 

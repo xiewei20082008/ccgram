@@ -80,6 +80,10 @@ If hooks are missing, ccgram warns at startup with the fix command. Hooks are op
 
 Claude transcripts are JSONL files under `~/.claude/projects/`. They are read incrementally (byte offsets) for efficient polling.
 
+### Task Lists
+
+Claude task state is derived from the transcript, not from terminal footer scraping. CCGram recognizes the structured `TaskCreate`, `TaskUpdate`, and `TaskList` tool flow, plus legacy `TodoWrite`, and renders the current tasks inside the topic's single editable status bubble. Hook notifications are used to refresh wait-state headers such as waiting for input or approval prompts faster, but they do not replace the transcript as the source of truth.
+
 ## Codex CLI
 
 Codex CLI lacks a session hook, so session tracking relies on hookless transcript discovery plus provider detection from the running process name.

@@ -34,6 +34,7 @@ The architecture preserves 7 well-balanced integrations: Hook System, Provider P
 | Module                   | Files                      | Description                                                                   |
 | ------------------------ | -------------------------- | ----------------------------------------------------------------------------- |
 | **Topic State Registry** | `topic_state_registry.py`  | Self-registering cleanup orchestration; replaces cleanup.py's 14 lazy imports |
+| **Claude Task State**    | `claude_task_state.py`     | Claude task snapshot storage and wait-header normalization                    |
 | **User Preferences**     | `user_preferences.py`      | Starred dirs, MRU, read offsets (extracted from SessionManager)               |
 | **Message Delivery**     | `handlers/msg_delivery.py` | `MessageDeliveryStrategy` singleton; breaks broker↔telegram cycle             |
 
@@ -78,6 +79,20 @@ SessionMonitor detects new JSONL content
 ```
 
 **Modules**: Session Monitor → Thread Router → Message Queue → Telegram API
+
+### Flow 2b: Claude Task List State (NEW)
+
+```
+SessionMonitor reads Claude transcript entries
+  → Claude task state rebuilds TaskCreate / TaskUpdate / TaskList / TodoWrite snapshot
+  → Hook dispatcher records transient wait headers from Notification
+  → Hook TaskCompleted marks the matching task complete when the task id is known
+  → Message Queue composes the topic's single status bubble from wait header + task snapshot
+  → Telegram message is edited in place
+```
+
+**Modules**: Session Monitor → Claude Task State → Hook Events → Message Queue → Telegram API
+**Key design**: transcript is authoritative; hooks only accelerate the UI refresh path
 
 ### Flow 3: Inter-Agent Message Delivery (NEW)
 
