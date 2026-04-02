@@ -280,16 +280,61 @@ Agents running in tmux windows can discover each other, exchange messages, broad
 
 ### How It Works
 
+```mermaid
+graph LR
+  subgraph agents["🖥️ tmux — Agent Windows"]
+    A["🟠 Agent A<br>claude · @0"]
+    B["🟠 Agent B<br>claude · @3"]
+  end
+
+  subgraph bot["⚙️ ccgram Bot"]
+    MBX["📬 Mailbox<br>~/.ccgram/mailbox/"]
+    BRK["🔄 Broker<br>idle detection · send_keys"]
+  end
+
+  subgraph tg["📱 Telegram"]
+    TA["💬 Topic A"]
+    TB["💬 Topic B"]
+  end
+
+  A -- "ccgram msg send<br>ccgram:@3 'help'" --> MBX
+  MBX --> BRK
+  BRK -- "inject on idle" --> B
+  B -- "ccgram msg reply<br>msg-id 'done'" --> MBX
+  MBX --> BRK
+  BRK -- "inject reply" --> A
+  BRK -. "silent notif" .-> TA
+  BRK -. "silent notif" .-> TB
+
+  style agents fill:#f0faf0,stroke:#2ea44f,stroke-width:2px,color:#333
+  style bot fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#333
+  style tg fill:#e8f4fd,stroke:#0088cc,stroke-width:2px,color:#333
+  style A fill:#fff,stroke:#2ea44f,stroke-width:1px,color:#333
+  style B fill:#fff,stroke:#2ea44f,stroke-width:1px,color:#333
+  style MBX fill:#fff,stroke:#e65100,stroke-width:1px,color:#333
+  style BRK fill:#fff,stroke:#e65100,stroke-width:1px,color:#333
+  style TA fill:#fff,stroke:#0088cc,stroke-width:1px,color:#333
+  style TB fill:#fff,stroke:#0088cc,stroke-width:1px,color:#333
 ```
-Agent A (claude, @0)              ccgram bot                    Agent B (claude, @3)
-────────────────────              ──────────                    ────────────────────
-ccgram msg send                   Writes JSON to                Broker detects B is
-  ccgram:@3 "help"  ──────────►  ~/.ccgram/mailbox/@3/  ────►  idle, injects message
-                                  Telegram: silent notif         via send_keys
-                                  in both topics
-                                                                B reads message,
-ccgram msg reply                                                runs ccgram msg reply
-  <msg-id> "done"   ◄──────────  Broker delivers reply  ◄────  <msg-id> "done"
+
+**Message lifecycle:**
+
+```mermaid
+graph LR
+  S1["1️⃣ Send"]
+  S2["2️⃣ Queue"]
+  S3["3️⃣ Deliver"]
+  S4["4️⃣ Reply"]
+
+  S1 -- "ccgram msg send<br>→ JSON to mailbox/" --> S2
+  S2 -- "broker polls<br>waits for idle" --> S3
+  S3 -- "send_keys into<br>recipient pane" --> S4
+  S4 -- "ccgram msg reply<br>→ JSON to sender mailbox/" --> S2
+
+  style S1 fill:#e8f4fd,stroke:#0088cc,stroke-width:2px,color:#333
+  style S2 fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#333
+  style S3 fill:#f0faf0,stroke:#2ea44f,stroke-width:2px,color:#333
+  style S4 fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px,color:#333
 ```
 
 1. **Sender** calls `ccgram msg send` — writes a JSON message to the recipient's mailbox
