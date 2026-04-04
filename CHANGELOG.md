@@ -4,10 +4,34 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [2.7.0] - 2026-04-04
+
+### Added
+- Make Telegram output more informative with two-tier approach
+- Add ccgram-messaging skill for inter-agent collaboration
+
+
+### Documentation
+- Add inter-agent messaging guide and README feature section [skip ci]
+- Replace ASCII diagrams with styled Mermaid in messaging guide [skip ci]
+- Add informative output implementation plan
+
+
+### Fixed
+- Auto-accept YOLO bypass permissions prompt on Claude window creation
+- Tighten vim INSERT mode detection to avoid Claude status bar false positives
+- Raise chrome line length limit to 250 for wide Claude status bars
+- Remove noisy debug log on non-interactive pane capture
+- Address code review findings for informative output
+
 ## [2.6.1] - 2026-04-02
 
 ### Added
 - Auto-install messaging skill on Claude window creation
+
+
+### Documentation
+- Update CHANGELOG.md for v2.6.1
 
 
 ### Fixed
