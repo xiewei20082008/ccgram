@@ -2,6 +2,8 @@
 
 Handles inline keyboard callbacks for screenshot UI and status message buttons:
   - CB_SCREENSHOT_REFRESH: Refresh an existing screenshot
+  - CB_LIVE_START: Start auto-refreshing live terminal view
+  - CB_LIVE_STOP: Stop live view and revert to screenshot keyboard
   - CB_STATUS_RECALL: Send one of the two recent commands from status row
   - CB_STATUS_ESC: Send Escape key from status message
   - CB_STATUS_SCREENSHOT: Take a screenshot from status message
@@ -16,6 +18,8 @@ Key function: handle_screenshot_callback (uniform callback handler signature).
 import asyncio
 import contextlib
 import io
+import time
+
 import structlog
 
 from telegram import (
@@ -23,6 +27,7 @@ from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     InputMediaDocument,
+    InputMediaPhoto,
     Update,
 )
 from telegram.error import TelegramError
@@ -34,6 +39,8 @@ from ..thread_router import thread_router
 from ..tmux_manager import send_to_window, tmux_manager
 from .callback_data import (
     CB_KEYS_PREFIX,
+    CB_LIVE_START,
+    CB_LIVE_STOP,
     CB_PANE_SCREENSHOT,
     CB_SCREENSHOT_REFRESH,
     CB_STATUS_ESC,
@@ -100,12 +107,114 @@ def build_screenshot_keyboard(
             [btn("\u238b Esc", "esc"), btn("^C", "cc"), btn("\u23ce Enter", "ent")],
             [
                 InlineKeyboardButton(
+                    "\U0001f4fa Live",
+                    callback_data=f"{CB_LIVE_START}{target}"[:64],
+                ),
+                InlineKeyboardButton(
                     "\U0001f504 Refresh",
                     callback_data=f"{CB_SCREENSHOT_REFRESH}{target}"[:64],
-                )
+                ),
             ],
         ]
     )
+
+
+async def _handle_live_start(
+    query: CallbackQuery, user_id: int, data: str, update: Update
+) -> None:
+    """Handle CB_LIVE_START: start auto-refreshing live view."""
+    target = data[len(CB_LIVE_START) :]
+    window_id, pane_id = _parse_target(target)
+    if not user_owns_window(user_id, window_id):
+        await query.answer("Not your session", show_alert=True)
+        return
+    thread_id = get_thread_id(update)
+    if thread_id is None:
+        await query.answer("Use in a topic", show_alert=True)
+        return
+
+    from .live_view import (
+        LiveViewState,
+        build_live_keyboard,
+        content_hash,
+        is_live,
+        start_live_view,
+    )
+
+    if is_live(user_id, thread_id):
+        await query.answer("Already live")
+        return
+
+    w = await tmux_manager.find_window_by_id(window_id)
+    if not w:
+        await query.answer("Window not found", show_alert=True)
+        return
+
+    if pane_id:
+        text = await tmux_manager.capture_pane_by_id(
+            pane_id, with_ansi=True, window_id=window_id
+        )
+    else:
+        text = await tmux_manager.capture_pane(w.window_id, with_ansi=True)
+    if not text:
+        await query.answer("Failed to capture pane", show_alert=True)
+        return
+
+    chat_id = thread_router.resolve_chat_id(user_id, thread_id)
+    png_bytes = await text_to_image(text, with_ansi=True, live_mode=True)
+    keyboard = build_live_keyboard(window_id, pane_id=pane_id)
+
+    try:
+        await query.edit_message_media(
+            media=InputMediaPhoto(
+                media=io.BytesIO(png_bytes),
+                caption=f"Live \u00b7 {time.strftime('%H:%M:%S')}",
+            ),
+            reply_markup=keyboard,
+        )
+    except TelegramError as e:
+        logger.error("Failed to start live view: %s", e)
+        await query.answer("Failed to start live view", show_alert=True)
+        return
+
+    if query.message is None:
+        await query.answer("Message lost")
+        return
+    start_live_view(
+        LiveViewState(
+            chat_id=chat_id,
+            message_id=query.message.message_id,
+            thread_id=thread_id,
+            user_id=user_id,
+            window_id=window_id,
+            pane_id=pane_id,
+            last_hash=content_hash(text),
+        )
+    )
+    await query.answer("\U0001f4fa Live started")
+
+
+async def _handle_live_stop(
+    query: CallbackQuery, user_id: int, data: str, update: Update
+) -> None:
+    """Handle CB_LIVE_STOP: stop live view and revert to screenshot keyboard."""
+    target = data[len(CB_LIVE_STOP) :]
+    window_id, pane_id = _parse_target(target)
+    if not user_owns_window(user_id, window_id):
+        await query.answer("Not your session", show_alert=True)
+        return
+    thread_id = get_thread_id(update)
+    if thread_id is None:
+        await query.answer("Use in a topic", show_alert=True)
+        return
+
+    from .live_view import stop_live_view
+
+    stop_live_view(user_id, thread_id)
+    keyboard = build_screenshot_keyboard(window_id, pane_id=pane_id)
+    with contextlib.suppress(TelegramError):
+        await query.edit_message_caption(caption="Screenshot", reply_markup=keyboard)
+    await query.answer("\u23f9 Stopped")
 
 
 def build_toolbar_keyboard(window_id: str) -> InlineKeyboardMarkup:
@@ -125,8 +234,8 @@ def build_toolbar_keyboard(window_id: str) -> InlineKeyboardMarkup:
                     callback_data=f"{CB_STATUS_SCREENSHOT}{window_id}"[:64],
                 ),
                 InlineKeyboardButton(
-                    "\u238b Esc",
-                    callback_data=f"{CB_STATUS_ESC}{window_id}"[:64],
+                    "\U0001f4fa Live",
+                    callback_data=f"{CB_LIVE_START}{window_id}"[:64],
                 ),
             ],
             [
@@ -239,9 +348,12 @@ async def handle_screenshot_callback(
     """Handle screenshot, status button, toolbar, and quick-key callbacks."""
     # Handlers that need (query, user_id, data, update)
     with_update = {
+        CB_LIVE_START: _handle_live_start,
+        CB_LIVE_STOP: _handle_live_stop,
         CB_STATUS_RECALL: _handle_status_recall,
         CB_STATUS_SCREENSHOT: _handle_status_screenshot,
         CB_PANE_SCREENSHOT: _handle_pane_screenshot,
+        CB_KEYS_PREFIX: _handle_keys,
     }
     for prefix, handler in with_update.items():
         if data.startswith(prefix):
@@ -255,7 +367,6 @@ async def handle_screenshot_callback(
         CB_STATUS_NOTIFY: _handle_notify_toggle,
         CB_STATUS_REMOTE: _handle_remote_control,
         CB_TOOLBAR_CTRLC: _handle_toolbar_ctrlc,
-        CB_KEYS_PREFIX: _handle_keys,
     }
     for prefix, handler in without_update.items():
         if data.startswith(prefix):
@@ -442,7 +553,9 @@ def _parse_target(target: str) -> tuple[str, str | None]:
     return target, None
 
 
-async def _handle_keys(query: CallbackQuery, user_id: int, data: str) -> None:
+async def _handle_keys(
+    query: CallbackQuery, user_id: int, data: str, update: Update
+) -> None:
     """Handle CB_KEYS_PREFIX: send a quick key from screenshot keyboard."""
     rest = data[len(CB_KEYS_PREFIX) :]
     colon_idx = rest.find(":")
@@ -478,6 +591,13 @@ async def _handle_keys(query: CallbackQuery, user_id: int, data: str) -> None:
         )
     await query.answer(KEY_LABELS.get(key_id, key_id))
 
+    # During live view, skip the refresh — next tick handles it
+    from .live_view import get_live_view
+
+    thread_id = get_thread_id(update)
+    if thread_id is not None and get_live_view(user_id, thread_id) is not None:
+        return
+
     # Refresh screenshot after key press
     await asyncio.sleep(0.5)
     if pane_id:
@@ -503,6 +623,8 @@ async def _handle_keys(query: CallbackQuery, user_id: int, data: str) -> None:
 
 
 @register(
+    CB_LIVE_START,
+    CB_LIVE_STOP,
     CB_SCREENSHOT_REFRESH,
     CB_STATUS_RECALL,
     CB_STATUS_ESC,

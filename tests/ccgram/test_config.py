@@ -181,3 +181,44 @@ class TestMessagingConfig:
     def test_mailbox_dir_derived_from_config_dir(self, tmp_path):
         cfg = Config()
         assert cfg.mailbox_dir == tmp_path / "mailbox"
+
+
+@pytest.mark.usefixtures("_base_env")
+class TestLiveViewConfig:
+    def test_live_view_interval_default(self):
+        cfg = Config()
+        assert cfg.live_view_interval == 5
+
+    def test_live_view_interval_override(self, monkeypatch):
+        monkeypatch.setenv("CCGRAM_LIVE_VIEW_INTERVAL", "10")
+        cfg = Config()
+        assert cfg.live_view_interval == 10
+
+    def test_live_view_timeout_default(self):
+        cfg = Config()
+        assert cfg.live_view_timeout == 300
+
+    def test_live_view_timeout_override(self, monkeypatch):
+        monkeypatch.setenv("CCGRAM_LIVE_VIEW_TIMEOUT", "600")
+        cfg = Config()
+        assert cfg.live_view_timeout == 600
+
+    def test_live_view_interval_zero_clamped_to_one(self, monkeypatch):
+        monkeypatch.setenv("CCGRAM_LIVE_VIEW_INTERVAL", "0")
+        cfg = Config()
+        assert cfg.live_view_interval == 1
+
+    def test_live_view_timeout_zero_clamped_to_one(self, monkeypatch):
+        monkeypatch.setenv("CCGRAM_LIVE_VIEW_TIMEOUT", "0")
+        cfg = Config()
+        assert cfg.live_view_timeout == 1
+
+    def test_live_view_interval_invalid(self, monkeypatch):
+        monkeypatch.setenv("CCGRAM_LIVE_VIEW_INTERVAL", "not-a-number")
+        with pytest.raises(ValueError, match="CCGRAM_LIVE_VIEW_INTERVAL"):
+            Config()
+
+    def test_live_view_timeout_invalid(self, monkeypatch):
+        monkeypatch.setenv("CCGRAM_LIVE_VIEW_TIMEOUT", "not-a-number")
+        with pytest.raises(ValueError, match="CCGRAM_LIVE_VIEW_TIMEOUT"):
+            Config()

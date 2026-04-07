@@ -95,13 +95,19 @@ class StyledSegment:
     font_tier: int
 
 
+_font_cache: dict[tuple[str, int], ImageFont.FreeTypeFont | ImageFont.ImageFont] = {}
+
+
 def _load_font(path: Path, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
-    """Load a TrueType/OpenType font, falling back to Pillow default."""
-    try:
-        return ImageFont.truetype(str(path), size)
-    except OSError:
-        logger.warning("Failed to load font %s, using Pillow default", path)
-        return ImageFont.load_default()
+    """Load a TrueType/OpenType font, falling back to Pillow default. Results are cached."""
+    key = (str(path), size)
+    if key not in _font_cache:
+        try:
+            _font_cache[key] = ImageFont.truetype(str(path), size)
+        except OSError:
+            logger.warning("Failed to load font %s, using Pillow default", path)
+            _font_cache[key] = ImageFont.load_default()
+    return _font_cache[key]
 
 
 def _font_tier(ch: str) -> int:
@@ -260,7 +266,11 @@ def _split_line_segments_plain(line: str) -> list[tuple[str, int]]:
 
 
 async def text_to_image(
-    text: str, font_size: int = 28, with_ansi: bool = True
+    text: str,
+    font_size: int = 28,
+    with_ansi: bool = True,
+    *,
+    live_mode: bool = False,
 ) -> bytes:
     """Render monospace text onto a dark-background image and return PNG bytes.
 
@@ -268,13 +278,16 @@ async def text_to_image(
         text: The text to render (may contain ANSI color codes)
         font_size: Font size in pixels
         with_ansi: If True, parse and render ANSI color codes
+        live_mode: If True, optimize for repeated streaming (smaller font,
+            palette quantization, max compression)
 
     Returns:
         PNG image bytes
     """
+    effective_font_size = 20 if live_mode else font_size
 
     def _render_image() -> bytes:
-        fonts = [_load_font(p, font_size) for p in _FONT_PATHS]
+        fonts = [_load_font(p, effective_font_size) for p in _FONT_PATHS]
 
         lines = text.split("\n")
         padding = 16
@@ -296,7 +309,7 @@ async def text_to_image(
         # Measure text size
         dummy = Image.new("RGB", (1, 1))
         draw = ImageDraw.Draw(dummy)
-        line_height = int(font_size * 1.4)
+        line_height = int(effective_font_size * 1.4)
         max_width = 0
         for segments in line_segments:
             w = 0
@@ -335,7 +348,11 @@ async def text_to_image(
             y += line_height
 
         buf = io.BytesIO()
-        img.save(buf, format="PNG")
+        if live_mode:
+            img = img.quantize(colors=32)
+            img.save(buf, format="PNG", optimize=True, compress_level=9)
+        else:
+            img.save(buf, format="PNG")
         return buf.getvalue()
 
     # Run CPU-intensive image rendering in thread pool

@@ -1,11 +1,11 @@
 """Periodic task orchestration for the polling subsystem.
 
 Orchestrates time-gated tasks within the poll loop: message broker delivery,
-mailbox sweep, spawn request processing, topic lifecycle management, and
-state pruning.
+mailbox sweep, spawn request processing, topic lifecycle management, live view
+ticking, and state pruning.
 
 Key components:
-  - run_periodic_tasks: time-gated broker, sweep, and topic check
+  - run_periodic_tasks: time-gated broker, sweep, live view tick, and topic check
   - run_lifecycle_tasks: per-tick autoclose and unbound window management
   - run_broker_cycle: message broker delivery (also called from hook_events)
 """
@@ -22,6 +22,7 @@ from ..session import session_manager
 from ..tmux_manager import tmux_manager
 from ..utils import log_throttle_sweep
 from .msg_broker import BROKER_CYCLE_INTERVAL, SWEEP_INTERVAL
+from .live_view import tick_live_views
 from .topic_lifecycle import (
     check_autoclose_timers,
     check_unbound_window_ttl,
@@ -111,6 +112,11 @@ async def run_periodic_tasks(
 ) -> None:
     """Run time-gated periodic tasks (topic check, broker, sweep)."""
     now = time.monotonic()
+
+    if now - timers["live_view"] >= config.live_view_interval:
+        timers["live_view"] = now
+        await tick_live_views(bot)
+
     if now - timers["topic_check"] >= TOPIC_CHECK_INTERVAL:
         timers["topic_check"] = now
         await prune_stale_state(all_windows)
