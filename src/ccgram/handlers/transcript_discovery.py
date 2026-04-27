@@ -294,6 +294,7 @@ async def discover_and_register_transcript(
             return
 
     try:
+        _pane_cmd = w.pane_current_command if w else None
         with open("/tmp/1.log", "a") as _f:
             _f.write(
                 f"[discover] window_id={window_id} "
@@ -301,7 +302,7 @@ async def discover_and_register_transcript(
                 f"cwd={state.cwd!r} "
                 f"transcript_path={state.transcript_path!r} "
                 f"session_id={state.session_id!r} "
-                f"pane_cmd={w.pane_current_command!r if w else None}\n"
+                f"pane_cmd={_pane_cmd!r}\n"
             )
     except Exception:
         pass
