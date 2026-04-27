@@ -669,23 +669,47 @@ class GeminiProvider(JsonlProvider):
         (project alias) and older versions may use ``<projectHash>`` directory
         names. We match by ``projectHash`` (sha256 of resolved cwd).
         """
+
+        def _log(msg: str) -> None:
+            try:
+                with open("/tmp/1.log", "a") as _log_f:
+                    _log_f.write(msg + "\n")
+            except Exception:
+                pass
+
+        _log(f"[discover_transcript] ENTER cwd={cwd!r} window_key={window_key!r} max_age={max_age!r}")
+
         config_dir = Path.home() / ".gemini"
         sessions_root = config_dir / "tmp"
         if not sessions_root.is_dir():
+            _log(f"[discover_transcript] sessions_root not found: {sessions_root} → returning None")
             return None
 
         resolved_cwd = str(Path(cwd).resolve())
         expected_hash = hashlib.sha256(resolved_cwd.encode()).hexdigest()
         age_limit = _TRANSCRIPT_MAX_AGE_SECS if max_age is None else max_age
         now = time.time()
+
+        _log(
+            f"[discover_transcript] resolved_cwd={resolved_cwd!r} "
+            f"expected_hash={expected_hash[:16]}... "
+            f"age_limit={age_limit} now={now:.1f}"
+        )
+
         candidate_dirs = self._candidate_chats_dirs(
             sessions_root,
             config_dir,
             resolved_cwd,
             expected_hash,
         )
+        _log(f"[discover_transcript] candidate_dirs={[str(d) for d in candidate_dirs]}")
+
         sessions = self._collect_candidate_sessions(candidate_dirs)
-        return self._match_session_event(
+        _log(f"[discover_transcript] collected {len(sessions)} session file(s)")
+        for mtime, fpath in sorted(sessions, reverse=True)[:10]:
+            _log(f"[discover_transcript]   candidate mtime={mtime:.1f} file={fpath}")
+
+        result = self._match_session_event(
             sessions,
             expected_hash,
             resolved_cwd,
@@ -693,6 +717,16 @@ class GeminiProvider(JsonlProvider):
             age_limit=age_limit,
             now=now,
         )
+
+        if result:
+            _log(
+                f"[discover_transcript] MATCHED session_id={result.session_id} "
+                f"transcript={result.transcript_path}"
+            )
+        else:
+            _log("[discover_transcript] NO MATCH found → returning None")
+
+        return result
 
     def discover_commands(self, base_dir: str) -> list[DiscoveredCommand]:
         """Discover built-ins plus workspace Gemini TOML commands."""
