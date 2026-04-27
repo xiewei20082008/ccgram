@@ -9,8 +9,11 @@ Terminal UI: Gemini CLI uses ``@inquirer/select`` for interactive prompts.
 Permission prompts start with "Action Required" and list numbered options
 with a ``●`` (U+25CF) marker on the selected choice.
 
-Transcript format: single JSON file per session (NOT JSONL) with structure:
-  ``{sessionId, projectHash, startTime, lastUpdated, messages: [...]}``
+Transcript format: two variants depending on Gemini CLI version:
+  - Older: single JSON file per session (``.json``) with structure:
+    ``{sessionId, projectHash, startTime, lastUpdated, messages: [...]}``
+  - Newer: JSONL file per session (``.jsonl``) where each line is one
+    message object (same fields as entries in the older ``messages`` array)
 Messages use ``type`` field with values ``"user"`` / ``"gemini"`` and can
 store content as either a string or a list of ``{text: ...}`` fragments.
 """
@@ -303,10 +306,19 @@ def _read_project_alias(config_dir: Path, resolved_cwd: str) -> str:
 
 
 def _collect_gemini_sessions(chats_dir: Path) -> list[tuple[float, Path]]:
-    """Collect Gemini chat transcripts from a chats directory."""
+    """Collect Gemini chat transcripts from a chats directory.
+
+    Matches both ``session-*.json`` (older Gemini CLI) and
+    ``session-*.jsonl`` (newer Gemini CLI) formats.
+    """
     result: list[tuple[float, Path]] = []
     try:
-        files = sorted(chats_dir.glob("session-*.json"))
+        # Newer Gemini CLI writes .jsonl; older versions write .json.
+        # Collect both and let the caller sort by mtime.
+        files = sorted(
+            list(chats_dir.glob("session-*.json"))
+            + list(chats_dir.glob("session-*.jsonl"))
+        )
     except OSError:
         return result
     for fpath in files:
@@ -318,11 +330,21 @@ def _collect_gemini_sessions(chats_dir: Path) -> list[tuple[float, Path]]:
 
 
 def _read_gemini_session_meta(fpath: Path) -> tuple[str, str] | None:
-    """Read (session_id, project_hash) from a Gemini transcript JSON file."""
+    """Read (session_id, project_hash) from a Gemini transcript file.
+
+    Supports both the older single-JSON format (``.json``) and the newer
+    JSONL format (``.jsonl``) where metadata fields are on the first line.
+    """
     try:
         with open(fpath, encoding="utf-8") as f:
-            data = json.load(f)
-    except _JSON_READ_ERRORS:
+            first_line = f.readline()
+    except OSError:
+        return None
+    if not first_line:
+        return None
+    try:
+        data = json.loads(first_line)
+    except json.JSONDecodeError:
         return None
     if not isinstance(data, dict):
         return None
@@ -449,12 +471,16 @@ class GeminiProvider(JsonlProvider):
     def read_transcript_file(
         self, file_path: str, last_offset: int
     ) -> tuple[list[dict[str, Any]], int]:
-        """Read Gemini's single-JSON transcript and return new messages.
+        """Read Gemini's transcript and return new messages.
 
-        Gemini transcripts are a single JSON object with a ``messages`` array,
-        not JSONL. ``last_offset`` tracks the number of messages already seen.
+        Supports two formats depending on Gemini CLI version:
+        - ``.json`` (older): single JSON object with a ``messages`` array.
+          ``last_offset`` tracks the number of messages already seen.
+        - ``.jsonl`` (newer): first line is the session metadata header
+          (``{sessionId, projectHash, ...}``); subsequent lines are individual
+          message objects. ``last_offset`` counts messages (skipping header).
+
         Returns (new_message_entries, updated_offset).
-
         Uses an mtime+size cache to skip re-parsing when the file is unchanged.
         """
 
@@ -468,21 +494,56 @@ class GeminiProvider(JsonlProvider):
         if cached and cached[0] == st.st_mtime_ns and cached[1] == st.st_size:
             messages = list(cached[2])
         else:
+            is_jsonl = file_path.endswith(".jsonl")
             try:
                 with open(file_path, encoding="utf-8") as f:
-                    data = json.load(f)
+                    if is_jsonl:
+                        # JSONL format (newer Gemini CLI):
+                        #   Line 0: metadata header {sessionId, projectHash, ...} — skip
+                        #   Line N: message object OR {$set: ...} bookkeeping — skip $set
+                        # The same message id may appear twice: once as a preview
+                        # (no toolCalls) and again updated (with toolCalls).  We
+                        # keep the last occurrence so toolCalls are always present.
+                        seen: dict[str, int] = {}   # id -> position in ordered list
+                        ordered: list[dict[str, Any]] = []
+                        for i, line in enumerate(f):
+                            line = line.strip()
+                            if not line:
+                                continue
+                            if i == 0:
+                                # Metadata header — not a message
+                                continue
+                            try:
+                                obj = json.loads(line)
+                            except json.JSONDecodeError:
+                                continue
+                            if not isinstance(obj, dict):
+                                continue
+                            if "$set" in obj:
+                                # Bookkeeping record — skip
+                                continue
+                            msg_id = obj.get("id")
+                            if msg_id and isinstance(msg_id, str):
+                                if msg_id in seen:
+                                    # Update in place — later line is more complete
+                                    ordered[seen[msg_id]] = obj
+                                else:
+                                    seen[msg_id] = len(ordered)
+                                    ordered.append(obj)
+                            else:
+                                ordered.append(obj)
+                        messages = ordered
+                    else:
+                        data = json.load(f)
+                        if not isinstance(data, dict):
+                            return [], last_offset
+                        messages = data.get("messages", [])
+                        if not isinstance(messages, list):
+                            return [], last_offset
+                        messages = list(messages)
             except (json.JSONDecodeError, OSError):  # fmt: skip
                 return [], last_offset
 
-            if not isinstance(data, dict):
-                return [], last_offset
-
-            messages = data.get("messages", [])
-            if not isinstance(messages, list):
-                return [], last_offset
-
-            # Store a copy to prevent mutation of cached data
-            messages = list(messages)
             with _transcript_cache_lock:
                 if len(_transcript_cache) >= _TRANSCRIPT_CACHE_MAX:
                     # Evict first-inserted entry
