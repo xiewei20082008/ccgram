@@ -172,6 +172,13 @@ class TranscriptReader:
         for entry in agent_messages:
             if not entry.text:
                 continue
+            
+            try:
+                with open("/tmp/1.log", "a") as _log_f:
+                    _log_f.write(f"FILE READ: {file_path}\nTEXT: {entry.text}\n---\n")
+            except Exception:
+                pass
+
             new_messages.append(
                 NewMessage(
                     session_id=session_id,
