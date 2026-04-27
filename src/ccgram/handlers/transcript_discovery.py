@@ -52,6 +52,16 @@ async def _detect_and_apply_provider(
     detected = await detect_provider_from_pane(
         w.pane_current_command, pane_tty=w.pane_tty, window_id=window_id
     )
+    try:
+        with open("/tmp/1.log", "a") as _f:
+            _f.write(
+                f"[detect_provider] window_id={window_id} "
+                f"pane_cmd={w.pane_current_command!r} "
+                f"detected={detected!r} current={state.provider_name!r}\n"
+            )
+    except Exception:
+        pass
+
     if not detected and should_probe_pane_title_for_provider_detection(
         w.pane_current_command
     ):
@@ -60,10 +70,26 @@ async def _detect_and_apply_provider(
             w.pane_current_command,
             pane_title=pane_title,
         )
+        try:
+            with open("/tmp/1.log", "a") as _f:
+                _f.write(
+                    f"[detect_provider] pane_title probe: "
+                    f"pane_title={pane_title!r} detected={detected!r}\n"
+                )
+        except Exception:
+            pass
 
     if detected and detected != state.provider_name:
         old_provider = state.provider_name
         session_manager.set_window_provider(window_id, detected, cwd=w.cwd or None)
+        try:
+            with open("/tmp/1.log", "a") as _f:
+                _f.write(
+                    f"[detect_provider] SWITCHING provider: "
+                    f"{old_provider!r} → {detected!r} for window_id={window_id}\n"
+                )
+        except Exception:
+            pass
         from ..providers import get_provider_for_window
 
         new_caps = get_provider_for_window(window_id, detected)
@@ -91,6 +117,14 @@ async def _detect_and_apply_provider(
         inferred = detect_provider_from_transcript_path(state.transcript_path)
         if inferred and inferred != state.provider_name:
             session_manager.set_window_provider(window_id, inferred, cwd=w.cwd or None)
+            try:
+                with open("/tmp/1.log", "a") as _f:
+                    _f.write(
+                        f"[detect_provider] inferred from transcript_path: "
+                        f"{inferred!r} for window_id={window_id}\n"
+                    )
+            except Exception:
+                pass
 
 
 def _resolve_providers_to_try(
@@ -132,14 +166,40 @@ async def _find_and_register_transcript(
         else f"{config.tmux_session_name}:{window_id}"
     )
 
+    try:
+        with open("/tmp/1.log", "a") as _f:
+            _f.write(
+                f"[find_transcript] window_id={window_id} window_key={window_key} "
+                f"pane_alive={pane_alive} "
+                f"providers={[n for n, _ in providers_to_try]} "
+                f"state.cwd={state.cwd!r} state.transcript_path={state.transcript_path!r}\n"
+            )
+    except Exception:
+        pass
+
     for provider_name, provider in providers_to_try:
         max_age = 0 if pane_alive else None
+        try:
+            with open("/tmp/1.log", "a") as _f:
+                _f.write(
+                    f"[find_transcript] calling discover_transcript: "
+                    f"provider={provider_name!r} cwd={state.cwd!r} max_age={max_age!r}\n"
+                )
+        except Exception:
+            pass
         event = await asyncio.to_thread(
             provider.discover_transcript,
             state.cwd,
             window_key,
             max_age=max_age,
         )
+        try:
+            with open("/tmp/1.log", "a") as _f:
+                _f.write(
+                    f"[find_transcript] discover_transcript result: {event!r}\n"
+                )
+        except Exception:
+            pass
         if not event:
             continue
 
@@ -148,8 +208,26 @@ async def _find_and_register_transcript(
             and state.transcript_path == event.transcript_path
             and state.provider_name == provider_name
         ):
+            try:
+                with open("/tmp/1.log", "a") as _f:
+                    _f.write(
+                        f"[find_transcript] already registered (no change): "
+                        f"session_id={event.session_id!r}\n"
+                    )
+            except Exception:
+                pass
             return
 
+        try:
+            with open("/tmp/1.log", "a") as _f:
+                _f.write(
+                    f"[find_transcript] REGISTERING new session: "
+                    f"session_id={event.session_id!r} "
+                    f"transcript={event.transcript_path!r} "
+                    f"provider={provider_name!r}\n"
+                )
+        except Exception:
+            pass
         session_map_sync.register_hookless_session(
             window_id=window_id,
             session_id=event.session_id,
@@ -183,13 +261,52 @@ async def discover_and_register_transcript(
     """
     from ..thread_router import thread_router
 
+    # Fetch the window first so we can bootstrap state if needed.
+    w = _window or await tmux_manager.find_window_by_id(window_id)
+
     state = session_manager.window_states.get(window_id)
     if not state:
-        return
+        # No state yet — seed an empty record from the live window's cwd so
+        # that hookless discovery (Gemini, Codex) can run for the first time.
+        # Without this, discover_transcript is never reached and the session
+        # stays undiscovered forever (chicken-and-egg deadlock).
+        if not w or not w.cwd:
+            try:
+                with open("/tmp/1.log", "a") as _f:
+                    _f.write(
+                        f"[discover] SKIP window_id={window_id}: "
+                        f"no state and no live window/cwd (w={w!r})\n"
+                    )
+            except Exception:
+                pass
+            return
+        try:
+            with open("/tmp/1.log", "a") as _f:
+                _f.write(
+                    f"[discover] BOOTSTRAP state for window_id={window_id} "
+                    f"cwd={w.cwd!r}\n"
+                )
+        except Exception:
+            pass
+        session_manager.set_window_provider(window_id, "", cwd=w.cwd)
+        state = session_manager.window_states.get(window_id)
+        if not state:
+            return
+
+    try:
+        with open("/tmp/1.log", "a") as _f:
+            _f.write(
+                f"[discover] window_id={window_id} "
+                f"provider={state.provider_name!r} "
+                f"cwd={state.cwd!r} "
+                f"transcript_path={state.transcript_path!r} "
+                f"session_id={state.session_id!r} "
+                f"pane_cmd={w.pane_current_command!r if w else None}\n"
+            )
+    except Exception:
+        pass
 
     chat_id = thread_router.resolve_chat_id(user_id, thread_id) if user_id else 0
-
-    w = _window or await tmux_manager.find_window_by_id(window_id)
 
     if w and w.pane_current_command:
         await _detect_and_apply_provider(
@@ -199,16 +316,38 @@ async def discover_and_register_transcript(
     if state.provider_name:
         provider = get_provider_for_window(window_id, state.provider_name)
         if provider.capabilities.supports_hook:
+            try:
+                with open("/tmp/1.log", "a") as _f:
+                    _f.write(
+                        f"[discover] SKIP window_id={window_id}: "
+                        f"provider={state.provider_name!r} uses hooks\n"
+                    )
+            except Exception:
+                pass
             return
 
     if not state.cwd:
         if not w or not w.cwd:
+            try:
+                with open("/tmp/1.log", "a") as _f:
+                    _f.write(
+                        f"[discover] SKIP window_id={window_id}: no cwd in state or window\n"
+                    )
+            except Exception:
+                pass
             return
         session_manager.set_window_provider(
             window_id, state.provider_name or "", cwd=w.cwd
         )
 
     providers_to_try = _resolve_providers_to_try(window_id, state, w)
+    try:
+        with open("/tmp/1.log", "a") as _f:
+            _f.write(
+                f"[discover] providers_to_try={[n for n, _ in providers_to_try] if providers_to_try is not None else 'None (→shell)'}\n"
+            )
+    except Exception:
+        pass
     if providers_to_try is None:
         session_manager.set_window_provider(window_id, "shell")
         state.transcript_path = ""
@@ -219,7 +358,24 @@ async def discover_and_register_transcript(
         )
         return
     if not providers_to_try:
+        try:
+            with open("/tmp/1.log", "a") as _f:
+                _f.write(
+                    f"[discover] SKIP window_id={window_id}: "
+                    f"providers_to_try is empty (provider={state.provider_name!r} "
+                    f"supports_mailbox_delivery=False?)\n"
+                )
+        except Exception:
+            pass
         return
 
     pane_alive = w is not None and not is_shell_prompt(w.pane_current_command)
+    try:
+        with open("/tmp/1.log", "a") as _f:
+            _f.write(
+                f"[discover] calling _find_and_register_transcript: "
+                f"window_id={window_id} pane_alive={pane_alive}\n"
+            )
+    except Exception:
+        pass
     await _find_and_register_transcript(window_id, state, providers_to_try, pane_alive)
