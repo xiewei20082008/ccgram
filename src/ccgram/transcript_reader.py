@@ -100,6 +100,11 @@ class TranscriptReader:
         """Process a single session file for new messages."""
         tracked = self._state.get_session(session_id)
         provider = _resolve_provider_for_file(window_id, file_path)
+        try:
+            with open("/tmp/1.log", "a") as _log_f:
+                _log_f.write("_process_session_file\n")
+        except Exception:
+            pass
 
         if tracked is None:
             try:
@@ -126,6 +131,15 @@ class TranscriptReader:
             if provider.capabilities.supports_task_tracking and window_id:
                 await provider.seed_task_state(window_id, session_id, str(file_path))
             logger.debug("Started tracking session: %s", session_id)
+            try:
+                with open("/tmp/1.log", "a") as _log_f:
+                    _log_f.write(
+                        f"[NEW SESSION] session_id={session_id} file={file_path} "
+                        f"provider={provider.capabilities.name} "
+                        f"initial_offset={initial_offset} file_size={file_size}\n"
+                    )
+            except Exception:
+                pass
             return
 
         try:
@@ -137,19 +151,64 @@ class TranscriptReader:
         last_mtime = self._file_mtimes.get(session_id, 0.0)
         if provider.capabilities.supports_incremental_read:
             if current_mtime <= last_mtime and current_size <= tracked.last_byte_offset:
+                try:
+                    with open("/tmp/1.log", "a") as _log_f:
+                        _log_f.write(
+                            f"[STALE SKIP] session_id={session_id} file={file_path} "
+                            f"mtime={current_mtime} last_mtime={last_mtime} "
+                            f"size={current_size} offset={tracked.last_byte_offset}\n"
+                        )
+                except Exception:
+                    pass
                 return
         else:
             if current_mtime <= last_mtime:
+                try:
+                    with open("/tmp/1.log", "a") as _log_f:
+                        _log_f.write(
+                            f"[STALE SKIP whole-file] session_id={session_id} "
+                            f"file={file_path} mtime={current_mtime} last_mtime={last_mtime}\n"
+                        )
+                except Exception:
+                    pass
                 return
+
+        try:
+            with open("/tmp/1.log", "a") as _log_f:
+                _log_f.write(
+                    f"[READING] session_id={session_id} file={file_path} "
+                    f"provider={provider.capabilities.name} "
+                    f"offset={tracked.last_byte_offset} size={current_size}\n"
+                )
+        except Exception:
+            pass
 
         new_entries = await self._read_new_lines(tracked, file_path, window_id)
         self._file_mtimes[session_id] = current_mtime
+
+        try:
+            with open("/tmp/1.log", "a") as _log_f:
+                _log_f.write(
+                    f"[READ DONE] session_id={session_id} "
+                    f"new_entries={len(new_entries)} "
+                    f"new_offset={tracked.last_byte_offset}\n"
+                )
+        except Exception:
+            pass
 
         if new_entries:
             self._idle_tracker.record_activity(session_id)
 
         if provider.capabilities.supports_task_tracking and window_id:
             provider.apply_task_entries(window_id, session_id, new_entries)
+            try:
+                with open("/tmp/1.log", "a") as _log_f:
+                    _log_f.write(
+                        f"[TASK TRACKING] applied {len(new_entries)} entries "
+                        f"to window_id={window_id}\n"
+                    )
+            except Exception:
+                pass
 
         carry = self._pending_tools.get(session_id, {})
         session_cwd: str | None = None
@@ -158,6 +217,15 @@ class TranscriptReader:
                 if details.get("session_id") == session_id:
                     session_cwd = details.get("cwd")
                     break
+
+        try:
+            with open("/tmp/1.log", "a") as _log_f:
+                _log_f.write(
+                    f"[PARSING] session_id={session_id} "
+                    f"pending_tools={list(carry.keys())} cwd={session_cwd}\n"
+                )
+        except Exception:
+            pass
 
         agent_messages, remaining = provider.parse_transcript_entries(
             new_entries,
@@ -169,13 +237,31 @@ class TranscriptReader:
         else:
             self._pending_tools.pop(session_id, None)
 
+        try:
+            with open("/tmp/1.log", "a") as _log_f:
+                _log_f.write(
+                    f"[PARSED] session_id={session_id} "
+                    f"agent_messages={len(agent_messages)} "
+                    f"remaining_tools={list(remaining.keys()) if remaining else []}\n"
+                )
+        except Exception:
+            pass
+
         for entry in agent_messages:
             if not entry.text:
                 continue
             
             try:
                 with open("/tmp/1.log", "a") as _log_f:
-                    _log_f.write(f"FILE READ: {file_path}\nTEXT: {entry.text}\n---\n")
+                    _log_f.write(
+                        f"[NEW MESSAGE] file={file_path} "
+                        f"session_id={session_id} "
+                        f"role={entry.role} content_type={entry.content_type} "
+                        f"phase={entry.phase} is_complete={entry.is_complete} "
+                        f"tool_name={entry.tool_name} tool_use_id={entry.tool_use_id}\n"
+                        f"TEXT: {entry.text}\n"
+                        f"---\n"
+                    )
             except Exception:
                 pass
 
